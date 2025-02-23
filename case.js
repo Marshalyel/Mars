@@ -24,7 +24,7 @@ if (fs.existsSync(pluginsDir)) {
 // Tentukan prefix yang harus digunakan (misalnya: "!")
 const PREFIX = '!';
 
-// Muat custom commands dari file eksternal
+// Muat custom commands dari file eksternal (jika ada)
 const customCommandsFile = path.join(__dirname, 'custom_commands.json');
 let customCommands = { textCommands: {}, pluginCommands: {} };
 if (fs.existsSync(customCommandsFile)) {
@@ -74,9 +74,9 @@ async function handleCase(sock, message) {
     console.log(chalk.cyan("Argumen:"), args);
   }
 
-  // --- Proses penambahan perintah dinamis (tidak mengubah struktur switch-case) ---
+  // --- Proses penambahan perintah dinamis tanpa mengubah struktur switch-case ---
 
-  // Menambahkan case respons statis: !addcase nama | teks_balasan
+  // Tambah perintah statis baru: !addcase nama | teks_balasan
   if (command === 'addcase') {
     const rest = args.join(" ");
     const parts = rest.split(" | ");
@@ -93,7 +93,7 @@ async function handleCase(sock, message) {
     return sock.sendMessage(chatId, { text: `Command "${name}" berhasil ditambahkan.` });
   }
 
-  // Menambahkan plugin berbasis kode JavaScript: !addplugin nama | kode_javascript
+  // Tambah plugin baru: !addplugin nama | kode_javascript
   if (command === 'addplugin') {
     const rest = args.join(" ");
     const parts = rest.split(" | ");
@@ -110,19 +110,18 @@ async function handleCase(sock, message) {
     return sock.sendMessage(chatId, { text: `Plugin "${name}" berhasil ditambahkan.` });
   }
 
-  // Cek apakah command termasuk dalam custom text command
+  // --- Eksekusi perintah dinamis dari custom commands ---
+
+  // Jika command ada di custom text commands
   if (customCommands.textCommands[command]) {
     const resp = customCommands.textCommands[command];
     return sock.sendMessage(chatId, { text: resp });
   }
-
-  // Cek apakah command termasuk dalam custom plugin command
+  // Jika command ada di custom plugin commands
   if (customCommands.pluginCommands[command]) {
     try {
-      // Buat fungsi baru dari kode plugin
       const func = new Function('sock', 'message', 'args', customCommands.pluginCommands[command]);
       const result = func(sock, message, args);
-      // Jika fungsi mengembalikan Promise, tangani asinkronya
       Promise.resolve(result)
         .then(r => sock.sendMessage(chatId, { text: 'Hasil: ' + r }))
         .catch(err => sock.sendMessage(chatId, { text: 'Error: ' + err.message }));
@@ -132,9 +131,7 @@ async function handleCase(sock, message) {
     return;
   }
 
-  // --- Jika tidak terdeteksi sebagai perintah dinamis, lanjutkan ke switch-case built-in ---
-
-  // Jika terdapat plugin (yang sudah dimuat dari folder plugins), jalankan
+  // --- Jika tidak terdeteksi sebagai perintah dinamis, cek plugin dari folder ---
   if (plugins.has(command)) {
     const plugin = plugins.get(command);
     console.log(chalk.blue(`Menjalankan plugin untuk perintah: ${command}`));
@@ -146,19 +143,61 @@ async function handleCase(sock, message) {
 
   let response = '';
 
-  // Logika switch-case built-in (struktur ini tidak diubah)
+  // --- Switch-case built-in (struktur tidak diubah) ---
   switch (command) {
     case 'halo':
       response = 'Halo! Apa kabar?';
       break;
-    case 'menu':
-      response = 'Menu yang tersedia:\n1. Info\n2. Bantuan\n3. Tentang';
+    case 'menu': {
+      // Untuk menu, kita akan membaca file sumber (case.js) dan mengekstrak built-in commands secara otomatis
+      let sourceCode = fs.readFileSync(__filename, 'utf8');
+      let builtInMatches = [];
+      let regex = /case\s+'(\w+)'/g;
+      let match;
+      while ((match = regex.exec(sourceCode)) !== null) {
+        builtInMatches.push(match[1]);
+      }
+      // Hilangkan duplikat (jika ada)
+      builtInMatches = Array.from(new Set(builtInMatches));
+      let menuText = 'Menu yang tersedia:\n\n';
+      // Tampilkan built-in commands
+      menuText += 'Built-in Commands:\n';
+      builtInMatches.forEach((cmd, index) => {
+        menuText += `${index + 1}. ${PREFIX}${cmd}\n`;
+      });
+      // Tampilkan custom text commands
+      const customTextKeys = Object.keys(customCommands.textCommands);
+      if (customTextKeys.length > 0) {
+        menuText += '\nCustom Text Commands:\n';
+        customTextKeys.forEach((cmd, i) => {
+          menuText += `${i + 1}. ${PREFIX}${cmd}\n`;
+        });
+      }
+      // Tampilkan custom plugin commands
+      const customPluginKeys = Object.keys(customCommands.pluginCommands);
+      if (customPluginKeys.length > 0) {
+        menuText += '\nCustom Plugin Commands:\n';
+        customPluginKeys.forEach((cmd, i) => {
+          menuText += `${i + 1}. ${PREFIX}${cmd}\n`;
+        });
+      }
+      // Tampilkan commands dari folder plugins
+      if (plugins.size > 0) {
+        menuText += '\nPlugin Commands:\n';
+        let i = 1;
+        for (const [name, plugin] of plugins.entries()) {
+          menuText += `${i}. ${PREFIX}${name} - ${plugin.description || 'Tanpa deskripsi'}\n`;
+          i++;
+        }
+      }
+      response = menuText;
       break;
+    }
     case 'info':
       response = 'Ini adalah bot WhatsApp sederhana menggunakan @whiskeysockets/baileys.';
       break;
     case 'bantuan':
-      response = 'Silakan ketik perintah: !halo, !menu, !info, !bantuan, atau !tentang.';
+      response = 'Silakan ketik perintah: !halo, !menu, !info, !bantuan, !tentang, !marco, !restart, !update, !addcase, atau !addplugin.';
       break;
     case 'tentang':
       response = 'Bot ini dibuat untuk demonstrasi penggunaan @whiskeysockets/baileys dengan prefix command.';
@@ -172,7 +211,6 @@ async function handleCase(sock, message) {
       process.exit(0);
       return;
     case 'update':
-      // Fitur update (misalnya, update case.js atau index.js) ditangani di sini (jika diperlukan)
       response = 'Fitur update belum diimplementasikan di perintah ini.';
       break;
     default:
