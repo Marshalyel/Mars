@@ -8,6 +8,7 @@ const path = require('path');
 // Load plugin (jika ada) dari folder plugins
 const plugins = new Map();
 const pluginsDir = path.join(__dirname, 'plugins');
+
 if (fs.existsSync(pluginsDir)) {
   fs.readdirSync(pluginsDir).forEach(file => {
     if (file.endsWith('.js')) {
@@ -20,10 +21,10 @@ if (fs.existsSync(pluginsDir)) {
   });
 }
 
-// Tentukan prefix yang harus digunakan (misalnya: "!")
-const PREFIX = '!';
+// Definisikan array prefix yang diizinkan
+const MULTI_PREFIX = ['!', '.', '/'];
 
-// Muat custom commands dari file eksternal (untuk perintah user custom)
+// Muat custom commands dari file eksternal (jika ada)
 const customCommandsFile = path.join(__dirname, 'custom_commands.json');
 let customCommands = { textCommands: {}, pluginCommands: {} };
 if (fs.existsSync(customCommandsFile)) {
@@ -31,31 +32,6 @@ if (fs.existsSync(customCommandsFile)) {
     customCommands = JSON.parse(fs.readFileSync(customCommandsFile, 'utf8'));
   } catch (err) {
     console.error(chalk.red("Error loading custom commands:"), err);
-  }
-}
-
-/**
- * Fungsi untuk mengupdate file dengan konten dari URL remote.
- * Update hanya akan menggantikan file base (case.js atau index.js) dan
- * tidak akan menyentuh file custom_commands.json.
- *
- * @param {Object} sock - Instance WhatsApp socket dari Baileys
- * @param {Object} message - Objek pesan dari Baileys
- * @param {string} fileName - Nama file yang akan diupdate (misalnya: 'case.js' atau 'index.js')
- * @param {string} remoteUrl - URL remote yang menyediakan konten file terbaru
- */
-async function updateFile(sock, message, fileName, remoteUrl) {
-  const chatId = message.key.remoteJid;
-  try {
-    const response = await axios.get(remoteUrl);
-    const newContent = response.data;
-    const localPath = path.join(__dirname, fileName);
-    fs.writeFileSync(localPath, newContent, 'utf8');
-    await sock.sendMessage(chatId, { text: `${fileName} telah diperbarui.` });
-    console.log(chalk.green(`${fileName} updated successfully.`));
-  } catch (error) {
-    console.error(chalk.red(`Gagal memperbarui ${fileName}:`), error);
-    await sock.sendMessage(chatId, { text: `Gagal memperbarui ${fileName}.` });
   }
 }
 
@@ -69,7 +45,7 @@ async function handleCase(sock, message) {
   const chatId = message.key.remoteJid;
   let text = '';
 
-  // Ambil teks pesan dari properti pesan yang mungkin ada
+  // Ambil teks pesan dari beberapa kemungkinan properti
   if (message.message.conversation) {
     text = message.message.conversation;
   } else if (message.message.extendedTextMessage) {
@@ -80,22 +56,34 @@ async function handleCase(sock, message) {
   }
 
   text = text.trim();
-  if (!text.startsWith(PREFIX)) {
-    console.log(chalk.gray("Pesan tidak menggunakan prefix, diabaikan."));
+
+  // Cek apakah pesan diawali dengan salah satu prefix yang diizinkan
+  let usedPrefix = null;
+  for (const prefix of MULTI_PREFIX) {
+    if (text.startsWith(prefix)) {
+      usedPrefix = prefix;
+      break;
+    }
+  }
+  if (!usedPrefix) {
+    console.log(chalk.gray("Pesan tidak menggunakan prefix yang diizinkan, diabaikan."));
     return;
   }
 
-  const args = text.slice(PREFIX.length).trim().split(/ +/);
+  // Pisahkan perintah dan argumen berdasarkan prefix yang digunakan
+  const args = text.slice(usedPrefix.length).trim().split(/ +/);
   const command = args.shift().toLowerCase();
+
   console.log(chalk.cyan("Perintah yang terdeteksi:"), command);
   if (args.length > 0) console.log(chalk.cyan("Argumen:"), args);
 
   // --- Proses penambahan perintah dinamis tanpa mengubah struktur switch-case ---
+
   if (command === 'addcase') {
     const rest = args.join(" ");
     const parts = rest.split(" | ");
     if (parts.length < 2) {
-      return sock.sendMessage(chatId, { text: 'Format salah! Gunakan: !addcase nama | teks_balasan' });
+      return sock.sendMessage(chatId, { text: 'Format salah! Gunakan: ' + usedPrefix + 'addcase nama | teks_balasan' });
     }
     const name = parts[0].trim().toLowerCase();
     const response = parts.slice(1).join(" | ").trim();
@@ -111,7 +99,7 @@ async function handleCase(sock, message) {
     const rest = args.join(" ");
     const parts = rest.split(" | ");
     if (parts.length < 2) {
-      return sock.sendMessage(chatId, { text: 'Format salah! Gunakan: !addplugin nama | kode_javascript' });
+      return sock.sendMessage(chatId, { text: 'Format salah! Gunakan: ' + usedPrefix + 'addplugin nama | kode_javascript' });
     }
     const name = parts[0].trim().toLowerCase();
     const code = parts.slice(1).join(" | ").trim();
@@ -141,7 +129,7 @@ async function handleCase(sock, message) {
     return;
   }
 
-  // Eksekusi perintah dari plugin folder jika tersedia
+  // Jika perintah tidak terdeteksi sebagai perintah dinamis, cek plugin dari folder
   if (plugins.has(command)) {
     const plugin = plugins.get(command);
     console.log(chalk.blue(`Menjalankan plugin untuk perintah: ${command}`));
@@ -152,6 +140,7 @@ async function handleCase(sock, message) {
   }
 
   let response = '';
+
   // --- Switch-case built-in (struktur tidak diubah) ---
   switch (command) {
     case 'halo':
@@ -166,33 +155,33 @@ async function handleCase(sock, message) {
       while ((match = regex.exec(sourceCode)) !== null) {
         builtInMatches.push(match[1]);
       }
-      builtInMatches = Array.from(new Set(builtInMatches)); // hilangkan duplikat
+      builtInMatches = Array.from(new Set(builtInMatches)); // Hilangkan duplikat
       let menuText = 'Menu yang tersedia:\n\n';
       menuText += 'Built-in Commands:\n';
       builtInMatches.forEach((cmd, index) => {
-        menuText += `${index + 1}. ${PREFIX}${cmd}\n`;
+        menuText += `${index + 1}. ${MULTI_PREFIX[0]}${cmd}\n`;
       });
       // Tambahkan custom commands
       const customTextKeys = Object.keys(customCommands.textCommands);
       if (customTextKeys.length > 0) {
         menuText += '\nCustom Text Commands:\n';
         customTextKeys.forEach((cmd, i) => {
-          menuText += `${i + 1}. ${PREFIX}${cmd}\n`;
+          menuText += `${i + 1}. ${MULTI_PREFIX[0]}${cmd}\n`;
         });
       }
       const customPluginKeys = Object.keys(customCommands.pluginCommands);
       if (customPluginKeys.length > 0) {
         menuText += '\nCustom Plugin Commands:\n';
         customPluginKeys.forEach((cmd, i) => {
-          menuText += `${i + 1}. ${PREFIX}${cmd}\n`;
+          menuText += `${i + 1}. ${MULTI_PREFIX[0]}${cmd}\n`;
         });
       }
-      // Tambahkan perintah dari folder plugins
+      // Tambahkan commands dari folder plugins
       if (plugins.size > 0) {
         menuText += '\nPlugin Commands:\n';
         let i = 1;
         for (const [name, plugin] of plugins.entries()) {
-          menuText += `${i}. ${PREFIX}${name} - ${plugin.description || 'Tanpa deskripsi'}\n`;
+          menuText += `${i}. ${MULTI_PREFIX[0]}${name} - ${plugin.description || 'Tanpa deskripsi'}\n`;
           i++;
         }
       }
@@ -203,7 +192,7 @@ async function handleCase(sock, message) {
       response = 'Ini adalah bot WhatsApp sederhana menggunakan @whiskeysockets/baileys.';
       break;
     case 'bantuan':
-      response = 'Silakan ketik perintah: !halo, !menu, !info, !bantuan, !tentang, !marco, !restart, !update, !addcase, atau !addplugin.';
+      response = 'Silakan ketik perintah: ' + MULTI_PREFIX[0] + 'halo, ' + MULTI_PREFIX[0] + 'menu, ' + MULTI_PREFIX[0] + 'info, ' + MULTI_PREFIX[0] + 'bantuan, ' + MULTI_PREFIX[0] + 'tentang, ' + MULTI_PREFIX[0] + 'marco, ' + MULTI_PREFIX[0] + 'restart, ' + MULTI_PREFIX[0] + 'update, ' + MULTI_PREFIX[0] + 'addcase, atau ' + MULTI_PREFIX[0] + 'addplugin.';
       break;
     case 'tentang':
       response = 'Bot ini dibuat untuk demonstrasi penggunaan @whiskeysockets/baileys dengan prefix command.';
@@ -229,7 +218,6 @@ async function handleCase(sock, message) {
           response = 'Parameter update tidak dikenali. Gunakan "case" atau "index".';
         }
       } else {
-        // Update kedua file jika tidak ada parameter
         await updateFile(sock, message, 'case.js', remoteCaseUrl);
         await updateFile(sock, message, 'index.js', remoteIndexUrl);
       }
