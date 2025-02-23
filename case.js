@@ -121,6 +121,10 @@ function handleCase(sock, message) {
       // Jalankan fungsi update untuk case.js
       updateCaseFile(sock, message);
       return;
+    case 'marco':
+      // Fitur Marco Polo: jika perintah adalah 'marco', balas dengan 'polo'
+      response = 'polo';
+      break;
     default:
       response = 'Maaf, perintah tidak dikenali. Ketik "!menu" untuk melihat pilihan.';
       break;
