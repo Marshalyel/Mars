@@ -1,235 +1,257 @@
-// index.js
+// case.js
 
-const axios = require('axios');
-const { default: makeWASocket, useMultiFileAuthState, fetchLatestBaileysVersion, DisconnectReason } = require('@whiskeysockets/baileys');
-const pino = require('pino');
 const chalk = require('chalk');
-const qrcode = require('qrcode-terminal');
-const readline = require('readline');
+const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
 
-// Import setting.js
-let settings = require('./setting');
+// Fungsi updateFile untuk mengambil konten file dari URL remote dan menimpanya secara lokal.
+async function updateFile(sock, message, fileName, remoteUrl) {
+  const chatId = message.key.remoteJid;
+  try {
+    const response = await axios.get(remoteUrl);
+    const newContent = response.data;
+    const localPath = path.join(__dirname, fileName);
+    fs.writeFileSync(localPath, newContent, 'utf8');
+    await sock.sendMessage(chatId, { text: `${fileName} telah diperbarui.` });
+    console.log(chalk.green(`${fileName} updated successfully.`));
+  } catch (error) {
+    console.error(chalk.red(`Gagal memperbarui ${fileName}:`), error);
+    await sock.sendMessage(chatId, { text: `Gagal memperbarui ${fileName}.` });
+  }
+}
 
-// Impor fungsi handleCase (pastikan file case.js sudah disiapkan)
-const { handleCase } = require('./case');
+// Load plugin (jika ada) dari folder plugins
+const plugins = new Map();
+const pluginsDir = path.join(__dirname, 'plugins');
 
-/**
- * Fungsi untuk meminta input dari terminal.
- */
-function askQuestion(query) {
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout
+if (fs.existsSync(pluginsDir)) {
+  fs.readdirSync(pluginsDir).forEach(file => {
+    if (file.endsWith('.js')) {
+      const plugin = require(path.join(pluginsDir, file));
+      if (plugin.name && typeof plugin.run === 'function') {
+        plugins.set(plugin.name.toLowerCase(), plugin);
+        console.log(chalk.green(`Plugin loaded: ${plugin.name}`));
+      }
+    }
   });
-  return new Promise(resolve => rl.question(query, ans => {
-    rl.close();
-    resolve(ans);
-  }));
 }
 
-/**
- * Menu Setting: Update file setting.js (misal: nomor owner)
- */
-async function updateSetting() {
-  console.log(chalk.yellow("\n-- Setting --"));
-  console.log("Setting saat ini:");
-  console.log("Owner: " + settings.owner);
-  const newOwner = await askQuestion("Masukkan nomor owner baru (format: 628xxxxxxxxxx@s.whatsapp.net) atau tekan Enter untuk membatalkan: ");
-  if (newOwner.trim() !== "") {
-    // Buat isi file setting.js baru
-    const content = `module.exports = {\n  owner: '${newOwner.trim()}'\n};\n`;
-    fs.writeFileSync(path.join(__dirname, 'setting.js'), content, 'utf8');
-    console.log(chalk.green("Setting telah diperbarui."));
-    // Muat ulang setting
-    delete require.cache[require.resolve('./setting')];
-    settings = require('./setting');
-  } else {
-    console.log(chalk.gray("Tidak ada perubahan."));
-  }
-  // Kembali ke menu utama
-  await mainMenu();
-}
+// Definisikan array prefix yang diizinkan
+const MULTI_PREFIX = ['!', '.', '/'];
 
-/**
- * Fungsi untuk memulai koneksi WhatsApp.
- */
-async function startSock() {
+// Muat custom commands dari file eksternal (jika ada)
+const customCommandsFile = path.join(__dirname, 'custom_commands.json');
+let customCommands = { textCommands: {}, pluginCommands: {} };
+if (fs.existsSync(customCommandsFile)) {
   try {
-    // Cek apakah state autentikasi sudah tersedia
-    const authDir = 'auth_info';
-    if (!fs.existsSync(authDir) || fs.readdirSync(authDir).length === 0) {
-      // Jika belum ada state, lakukan autentikasi
-      await authenticateUser();
-    } else {
-      console.log(chalk.green("Sesi terdeteksi, melewati proses login."));
+    customCommands = JSON.parse(fs.readFileSync(customCommandsFile, 'utf8'));
+  } catch (err) {
+    console.error(chalk.red("Error loading custom commands:"), err);
+  }
+}
+
+/**
+ * Fungsi untuk menangani perintah pesan.
+ *
+ * @param {Object} sock - Instance WhatsApp socket dari Baileys.
+ * @param {Object} message - Objek pesan dari Baileys.
+ */
+async function handleCase(sock, message) {
+  const chatId = message.key.remoteJid;
+  let text = '';
+
+  // Ambil teks pesan dari beberapa kemungkinan properti
+  if (message.message.conversation) {
+    text = message.message.conversation;
+  } else if (message.message.extendedTextMessage) {
+    text = message.message.extendedTextMessage.text;
+  } else {
+    console.log(chalk.red("Pesan tanpa teks diterima, tidak diproses."));
+    return;
+  }
+
+  text = text.trim();
+
+  // Cek apakah pesan diawali dengan salah satu prefix yang diizinkan
+  let usedPrefix = null;
+  for (const prefix of MULTI_PREFIX) {
+    if (text.startsWith(prefix)) {
+      usedPrefix = prefix;
+      break;
     }
-
-    // Inisialisasi state autentikasi dan ambil versi terbaru dari Baileys
-    const { state, saveCreds } = await useMultiFileAuthState(authDir);
-    const { version } = await fetchLatestBaileysVersion();
-
-    // Buat instance socket WhatsApp
-    const sock = makeWASocket({
-      logger: pino({ level: 'silent' }),
-      printQRInTerminal: false,
-      auth: state,
-      version
-    });
-
-    // Simpan kredensial jika terjadi update
-    sock.ev.on('creds.update', saveCreds);
-
-    // Tangani update koneksi
-    sock.ev.on('connection.update', (update) => {
-      const { connection, lastDisconnect, qr, pairing } = update;
-      if (qr) {
-        qrcode.generate(qr, { small: true });
-        console.log(chalk.yellow("Scan QR Code di atas untuk masuk ke WhatsApp!"));
-      }
-      if (pairing) {
-        console.log(chalk.green("Gunakan pairing code: " + pairing.pairingCode));
-      }
-      if (connection === 'close') {
-        const shouldReconnect = (lastDisconnect.error)?.output?.statusCode !== DisconnectReason.loggedOut;
-        console.log(chalk.red("Koneksi terputus:"), lastDisconnect.error, "Reconnect:", shouldReconnect);
-        if (shouldReconnect) {
-          setTimeout(() => startSock(), 3000);
-        }
-      } else if (connection === 'open') {
-        console.log(chalk.green("Koneksi berhasil terbuka"));
-      }
-    });
-
-    // Tangani pesan masuk
-    sock.ev.on('messages.upsert', async m => {
-      try {
-        const message = m.messages[0];
-        if (!message.message || message.key.fromMe) return;
-        const sender = message.key.remoteJid;
-        const timestamp = new Date().toLocaleString();
-        let text = '';
-        if (message.message.conversation) {
-          text = message.message.conversation;
-        } else if (message.message.extendedTextMessage) {
-          text = message.message.extendedTextMessage.text;
-        }
-        console.log(chalk.blue('-------------------------------------------------'));
-        console.log(chalk.yellow(`Waktu   : ${timestamp}`));
-        console.log(chalk.magenta(`Pengirim: ${sender}`));
-        console.log(chalk.green(`Pesan   : ${text}`));
-        console.log(chalk.blue('-------------------------------------------------'));
-        // Proses pesan dengan fungsi handleCase
-        handleCase(sock, message);
-      } catch (error) {
-        console.error(chalk.red("Error processing message:"), error);
-      }
-    });
-
-    // Mulai polling untuk memeriksa pembaruan kode setiap 1 menit
-    setInterval(() => {
-      checkForRemoteUpdates(sock);
-    }, 60000);
-
-  } catch (error) {
-    console.error(chalk.red("Error in startSock:"), error);
   }
-}
-
-/**
- * Fungsi autentikasi:
- * Mengambil konfigurasi user dari GitHub dan meminta input username & password.
- */
-async function authenticateUser() {
-  const configData = await fetchConfig();
-  if (!Array.isArray(configData) || configData.length === 0) {
-    console.error(chalk.red("Konfigurasi user tidak valid atau kosong:"), JSON.stringify(configData, null, 2));
-    process.exit(1);
+  if (!usedPrefix) {
+    console.log(chalk.gray("Pesan tidak menggunakan prefix yang diizinkan, diabaikan."));
+    return;
   }
-  console.log(chalk.blue("Silakan login menggunakan username dan password:"));
-  const inputUsername = (await askQuestion("Username: ")).trim();
-  const inputPassword = (await askQuestion("Password: ")).trim();
-  console.log(chalk.gray(`DEBUG: Input Username: '${inputUsername}', Password: '${inputPassword}'`));
-  const foundUser = configData.find(user => user.username === inputUsername && user.password === inputPassword);
-  console.log(chalk.gray("DEBUG: Found User:"), foundUser);
-  if (foundUser) {
-    console.log(chalk.green("Login berhasil!"));
-    return true;
-  } else {
-    console.log(chalk.red("Login gagal. Username atau password salah."));
-    process.exit(1);
-  }
-}
 
-/**
- * Fungsi untuk mengambil konfigurasi user dari GitHub.
- */
-async function fetchConfig() {
-  const url = 'https://raw.githubusercontent.com/latesturl/dbRaolProjects/main/dbconfig.json';
-  try {
-    const response = await axios.get(url);
-    console.log(chalk.gray("DEBUG: Fetched config data:"), JSON.stringify(response.data, null, 2));
-    return response.data;
-  } catch (error) {
-    console.error(chalk.red('Failed to fetch config:'), error);
-    return null;
-  }
-}
+  // Pisahkan perintah dan argumen berdasarkan prefix yang digunakan
+  const args = text.slice(usedPrefix.length).trim().split(/ +/);
+  const command = args.shift().toLowerCase();
 
-/**
- * Fungsi untuk memeriksa pembaruan file remote (index.js dan case.js).
- * Normalisasi konten dengan trim() agar perbedaan whitespace tidak terdeteksi.
- */
-async function checkForRemoteUpdates(sock) {
-  const filesToCheck = [
-    { localFile: 'index.js', remoteUrl: 'https://raw.githubusercontent.com/Marshalyel/Mars/master/index.js' },
-    { localFile: 'case.js', remoteUrl: 'https://raw.githubusercontent.com/Marshalyel/Mars/master/case.js' }
-  ];
-  for (const fileObj of filesToCheck) {
+  console.log(chalk.cyan("Perintah yang terdeteksi:"), command);
+  if (args.length > 0) console.log(chalk.cyan("Argumen:"), args);
+
+  // --- Proses penambahan perintah dinamis tanpa mengubah struktur switch-case ---
+
+  // Tambah perintah statis baru: !addcase nama | teks_balasan
+  if (command === 'addcase') {
+    const rest = args.join(" ");
+    const parts = rest.split(" | ");
+    if (parts.length < 2) {
+      return sock.sendMessage(chatId, { text: 'Format salah! Gunakan: ' + usedPrefix + 'addcase nama | teks_balasan' });
+    }
+    const name = parts[0].trim().toLowerCase();
+    const response = parts.slice(1).join(" | ").trim();
+    if (customCommands.textCommands[name] || customCommands.pluginCommands[name]) {
+      return sock.sendMessage(chatId, { text: `Command "${name}" sudah ada.` });
+    }
+    customCommands.textCommands[name] = response;
+    fs.writeFileSync(customCommandsFile, JSON.stringify(customCommands, null, 2));
+    return sock.sendMessage(chatId, { text: `Command "${name}" berhasil ditambahkan.` });
+  }
+
+  // Tambah plugin baru: !addplugin nama | kode_javascript
+  if (command === 'addplugin') {
+    const rest = args.join(" ");
+    const parts = rest.split(" | ");
+    if (parts.length < 2) {
+      return sock.sendMessage(chatId, { text: 'Format salah! Gunakan: ' + usedPrefix + 'addplugin nama | kode_javascript' });
+    }
+    const name = parts[0].trim().toLowerCase();
+    const code = parts.slice(1).join(" | ").trim();
+    if (customCommands.textCommands[name] || customCommands.pluginCommands[name]) {
+      return sock.sendMessage(chatId, { text: `Command "${name}" sudah ada.` });
+    }
+    customCommands.pluginCommands[name] = code;
+    fs.writeFileSync(customCommandsFile, JSON.stringify(customCommands, null, 2));
+    return sock.sendMessage(chatId, { text: `Plugin "${name}" berhasil ditambahkan.` });
+  }
+
+  // Eksekusi perintah dari custom commands jika ada
+  if (customCommands.textCommands[command]) {
+    const resp = customCommands.textCommands[command];
+    return sock.sendMessage(chatId, { text: resp });
+  }
+  if (customCommands.pluginCommands[command]) {
     try {
-      const remoteResponse = await axios.get(fileObj.remoteUrl);
-      let remoteContent = remoteResponse.data.trim();
-      let localContent = fs.readFileSync(fileObj.localFile, 'utf8').trim();
-      if (localContent !== remoteContent) {
-        const ownerJid = settings.owner;
-        const warnMessage = `Peringatan: Terdeteksi perubahan kode pada ${fileObj.localFile} di GitHub. Silakan lakukan !update.`;
-        await sock.sendMessage(ownerJid, { text: warnMessage });
-        console.log(chalk.yellow(`Peringatan dikirim ke ${ownerJid} karena ${fileObj.localFile} berbeda.`));
-        break;
-      }
-    } catch (error) {
-      console.error(chalk.red(`Gagal memeriksa pembaruan untuk ${fileObj.localFile}:`), error);
+      const func = new Function('sock', 'message', 'args', customCommands.pluginCommands[command]);
+      const result = func(sock, message, args);
+      Promise.resolve(result)
+        .then(r => sock.sendMessage(chatId, { text: 'Hasil: ' + r }))
+        .catch(err => sock.sendMessage(chatId, { text: 'Error: ' + err.message }));
+    } catch (err) {
+      return sock.sendMessage(chatId, { text: 'Error: ' + err.message });
     }
+    return;
+  }
+
+  // Eksekusi perintah dari plugin folder jika tersedia
+  if (plugins.has(command)) {
+    const plugin = plugins.get(command);
+    console.log(chalk.blue(`Menjalankan plugin untuk perintah: ${command}`));
+    plugin.run(sock, message, args)
+      .then(() => console.log(chalk.green(`Plugin "${command}" dijalankan.`)))
+      .catch(err => console.error(chalk.red(`Error menjalankan plugin "${command}":`), err));
+    return;
+  }
+
+  let response = '';
+
+  // --- Switch-case built-in (struktur tidak diubah) ---
+  switch (command) {
+    case 'halo':
+      response = 'Halo! Apa kabar?';
+      break;
+    case 'menu': {
+      // Bangun menu dinamis dengan mendeteksi perintah built-in secara otomatis
+      let sourceCode = fs.readFileSync(__filename, 'utf8');
+      let builtInMatches = [];
+      let regex = /case\s+'(\w+)'/g;
+      let match;
+      while ((match = regex.exec(sourceCode)) !== null) {
+        builtInMatches.push(match[1]);
+      }
+      builtInMatches = Array.from(new Set(builtInMatches));
+      let menuText = 'Menu yang tersedia:\n\n';
+      menuText += 'Built-in Commands:\n';
+      builtInMatches.forEach((cmd, index) => {
+        menuText += `${index + 1}. ${MULTI_PREFIX[0]}${cmd}\n`;
+      });
+      // Tambahkan custom text commands
+      const customTextKeys = Object.keys(customCommands.textCommands);
+      if (customTextKeys.length > 0) {
+        menuText += '\nCustom Text Commands:\n';
+        customTextKeys.forEach((cmd, i) => {
+          menuText += `${i + 1}. ${MULTI_PREFIX[0]}${cmd}\n`;
+        });
+      }
+      // Tambahkan custom plugin commands
+      const customPluginKeys = Object.keys(customCommands.pluginCommands);
+      if (customPluginKeys.length > 0) {
+        menuText += '\nCustom Plugin Commands:\n';
+        customPluginKeys.forEach((cmd, i) => {
+          menuText += `${i + 1}. ${MULTI_PREFIX[0]}${cmd}\n`;
+        });
+      }
+      // Tambahkan commands dari folder plugins
+      if (plugins.size > 0) {
+        menuText += '\nPlugin Commands:\n';
+        let i = 1;
+        for (const [name, plugin] of plugins.entries()) {
+          menuText += `${i}. ${MULTI_PREFIX[0]}${name} - ${plugin.description || 'Tanpa deskripsi'}\n`;
+          i++;
+        }
+      }
+      response = menuText;
+      break;
+    }
+    case 'info':
+      response = 'Ini adalah bot WhatsApp sederhana menggunakan @whiskeysockets/baileys.';
+      break;
+    case 'bantuan':
+      response = `Silakan ketik perintah: ${MULTI_PREFIX[0]}halo, ${MULTI_PREFIX[0]}menu, ${MULTI_PREFIX[0]}info, ${MULTI_PREFIX[0]}bantuan, ${MULTI_PREFIX[0]}tentang, ${MULTI_PREFIX[0]}marco, ${MULTI_PREFIX[0]}restart, ${MULTI_PREFIX[0]}update, ${MULTI_PREFIX[0]}addcase, atau ${MULTI_PREFIX[0]}addplugin.`;
+      break;
+    case 'tentang':
+      response = 'Bot ini dibuat untuk demonstrasi penggunaan @whiskeysockets/baileys dengan prefix command.';
+      break;
+    case 'marco':
+      response = 'polo';
+      break;
+    case 'restart':
+      await sock.sendMessage(chatId, { text: 'Bot sedang restart...' });
+      console.log(chalk.green("Bot sedang restart..."));
+      process.exit(0);
+      return;
+    case 'update': {
+      // Fitur update hanya mengupdate file base: case.js dan index.js
+      const remoteCaseUrl = 'https://raw.githubusercontent.com/Marshalyel/Mars/master/case.js';
+      const remoteIndexUrl = 'https://raw.githubusercontent.com/Marshalyel/Mars/master/index.js';
+      if (args.length > 0) {
+        if (args[0].toLowerCase() === 'case') {
+          await updateFile(sock, message, 'case.js', remoteCaseUrl);
+        } else if (args[0].toLowerCase() === 'index') {
+          await updateFile(sock, message, 'index.js', remoteIndexUrl);
+        } else {
+          response = 'Parameter update tidak dikenali. Gunakan "case" atau "index".';
+        }
+      } else {
+        await updateFile(sock, message, 'case.js', remoteCaseUrl);
+        await updateFile(sock, message, 'index.js', remoteIndexUrl);
+      }
+      return;
+    }
+    default:
+      response = `Maaf, perintah tidak dikenali. Ketik "${MULTI_PREFIX[0]}menu" untuk melihat pilihan.`;
+      break;
+  }
+
+  if (response) {
+    sock.sendMessage(chatId, { text: response })
+      .then(() => console.log(chalk.green("Balasan terkirim:"), response))
+      .catch(err => console.error(chalk.red("Gagal mengirim pesan:"), err));
   }
 }
 
-/**
- * Menu utama di console.
- */
-async function mainMenu() {
-  console.clear();
-  console.log(chalk.blue("=========================================="));
-  console.log(chalk.blue("         CONSOLE MENU BOT WHATSAPP        "));
-  console.log(chalk.blue("=========================================="));
-  console.log("Owner: " + settings.owner);
-  console.log("1. Interaksi (Bot berjalan & berinteraksi)");
-  console.log("2. Setting (Ubah konfigurasi, misal nomor owner)");
-  console.log("3. Exit");
-  const choice = await askQuestion("Pilih opsi (1/2/3): ");
-  if (choice.trim() === "1") {
-    // Jalankan bot (interaksi)
-    startSock();
-  } else if (choice.trim() === "2") {
-    await updateSetting();
-  } else if (choice.trim() === "3") {
-    console.log(chalk.green("Keluar..."));
-    process.exit(0);
-  } else {
-    console.log(chalk.red("Pilihan tidak valid."));
-    await mainMenu();
-  }
-}
-
-// Mulai dengan menampilkan menu utama
-mainMenu();
+module.exports = { handleCase };
