@@ -176,7 +176,7 @@ async function handleCase(sock, message) {
         menuText += "║         *Custom Text Commands:*                  ║\n";
         customTextKeys.forEach((cmd, i) => {
           let line = `║ ${i + 1}. ${PREFIX}${cmd}`;
-          line = line.padEnd(50, " ") + "║\n";
+          line = line.padEnd(50, "") + "\n";
           menuText += line;
         });
       }
@@ -188,7 +188,7 @@ async function handleCase(sock, message) {
         menuText += "║         *Custom Plugin Commands:*                ║\n";
         customPluginKeys.forEach((cmd, i) => {
           let line = `║ ${i + 1}. ${PREFIX}${cmd}`;
-          line = line.padEnd(50, " ") + "║\n";
+          line = line.padEnd(50, "") + "\n";
           menuText += line;
         });
       }
@@ -201,7 +201,7 @@ async function handleCase(sock, message) {
         for (const [name, plugin] of plugins.entries()) {
           let desc = plugin.description || "Tanpa deskripsi";
           let line = `║ ${i}. ${PREFIX}${name} - ${desc}`;
-          line = line.padEnd(50, " ") + "║\n";
+          line = line.padEnd(50, "") + "\n";
           menuText += line;
           i++;
         }
