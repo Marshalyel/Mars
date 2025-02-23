@@ -8,7 +8,6 @@ const path = require('path');
 // Load plugin (jika ada) dari folder plugins
 const plugins = new Map();
 const pluginsDir = path.join(__dirname, 'plugins');
-
 if (fs.existsSync(pluginsDir)) {
   fs.readdirSync(pluginsDir).forEach(file => {
     if (file.endsWith('.js')) {
@@ -24,7 +23,7 @@ if (fs.existsSync(pluginsDir)) {
 // Tentukan prefix yang harus digunakan (misalnya: "!")
 const PREFIX = '!';
 
-// Muat custom commands dari file eksternal (jika ada)
+// Muat custom commands dari file eksternal (untuk perintah user custom)
 const customCommandsFile = path.join(__dirname, 'custom_commands.json');
 let customCommands = { textCommands: {}, pluginCommands: {} };
 if (fs.existsSync(customCommandsFile)) {
@@ -36,17 +35,41 @@ if (fs.existsSync(customCommandsFile)) {
 }
 
 /**
+ * Fungsi untuk mengupdate file dengan konten dari URL remote.
+ * Update hanya akan menggantikan file base (case.js atau index.js) dan
+ * tidak akan menyentuh file custom_commands.json.
+ *
+ * @param {Object} sock - Instance WhatsApp socket dari Baileys
+ * @param {Object} message - Objek pesan dari Baileys
+ * @param {string} fileName - Nama file yang akan diupdate (misalnya: 'case.js' atau 'index.js')
+ * @param {string} remoteUrl - URL remote yang menyediakan konten file terbaru
+ */
+async function updateFile(sock, message, fileName, remoteUrl) {
+  const chatId = message.key.remoteJid;
+  try {
+    const response = await axios.get(remoteUrl);
+    const newContent = response.data;
+    const localPath = path.join(__dirname, fileName);
+    fs.writeFileSync(localPath, newContent, 'utf8');
+    await sock.sendMessage(chatId, { text: `${fileName} telah diperbarui.` });
+    console.log(chalk.green(`${fileName} updated successfully.`));
+  } catch (error) {
+    console.error(chalk.red(`Gagal memperbarui ${fileName}:`), error);
+    await sock.sendMessage(chatId, { text: `Gagal memperbarui ${fileName}.` });
+  }
+}
+
+/**
  * Fungsi untuk menangani perintah pesan.
  *
  * @param {Object} sock - Instance WhatsApp socket dari Baileys
  * @param {Object} message - Objek pesan dari Baileys
  */
 async function handleCase(sock, message) {
-  // Dapatkan ID chat (remoteJid)
   const chatId = message.key.remoteJid;
   let text = '';
 
-  // Ambil teks pesan dari beberapa kemungkinan properti
+  // Ambil teks pesan dari properti pesan yang mungkin ada
   if (message.message.conversation) {
     text = message.message.conversation;
   } else if (message.message.extendedTextMessage) {
@@ -56,27 +79,18 @@ async function handleCase(sock, message) {
     return;
   }
 
-  // Hapus spasi ekstra di awal dan akhir pesan
   text = text.trim();
-
-  // Periksa apakah pesan diawali dengan prefix
   if (!text.startsWith(PREFIX)) {
     console.log(chalk.gray("Pesan tidak menggunakan prefix, diabaikan."));
     return;
   }
 
-  // Pisahkan perintah dan argumen
   const args = text.slice(PREFIX.length).trim().split(/ +/);
   const command = args.shift().toLowerCase();
-
   console.log(chalk.cyan("Perintah yang terdeteksi:"), command);
-  if (args.length > 0) {
-    console.log(chalk.cyan("Argumen:"), args);
-  }
+  if (args.length > 0) console.log(chalk.cyan("Argumen:"), args);
 
   // --- Proses penambahan perintah dinamis tanpa mengubah struktur switch-case ---
-
-  // Tambah perintah statis baru: !addcase nama | teks_balasan
   if (command === 'addcase') {
     const rest = args.join(" ");
     const parts = rest.split(" | ");
@@ -93,7 +107,6 @@ async function handleCase(sock, message) {
     return sock.sendMessage(chatId, { text: `Command "${name}" berhasil ditambahkan.` });
   }
 
-  // Tambah plugin baru: !addplugin nama | kode_javascript
   if (command === 'addplugin') {
     const rest = args.join(" ");
     const parts = rest.split(" | ");
@@ -110,14 +123,11 @@ async function handleCase(sock, message) {
     return sock.sendMessage(chatId, { text: `Plugin "${name}" berhasil ditambahkan.` });
   }
 
-  // --- Eksekusi perintah dinamis dari custom commands ---
-
-  // Jika command ada di custom text commands
+  // Eksekusi perintah dari custom commands jika ada
   if (customCommands.textCommands[command]) {
     const resp = customCommands.textCommands[command];
     return sock.sendMessage(chatId, { text: resp });
   }
-  // Jika command ada di custom plugin commands
   if (customCommands.pluginCommands[command]) {
     try {
       const func = new Function('sock', 'message', 'args', customCommands.pluginCommands[command]);
@@ -131,7 +141,7 @@ async function handleCase(sock, message) {
     return;
   }
 
-  // --- Jika tidak terdeteksi sebagai perintah dinamis, cek plugin dari folder ---
+  // Eksekusi perintah dari plugin folder jika tersedia
   if (plugins.has(command)) {
     const plugin = plugins.get(command);
     console.log(chalk.blue(`Menjalankan plugin untuk perintah: ${command}`));
@@ -142,14 +152,13 @@ async function handleCase(sock, message) {
   }
 
   let response = '';
-
   // --- Switch-case built-in (struktur tidak diubah) ---
   switch (command) {
     case 'halo':
       response = 'Halo! Apa kabar?';
       break;
     case 'menu': {
-      // Untuk menu, kita akan membaca file sumber (case.js) dan mengekstrak built-in commands secara otomatis
+      // Bangun menu dinamis dengan mendeteksi perintah built-in secara otomatis
       let sourceCode = fs.readFileSync(__filename, 'utf8');
       let builtInMatches = [];
       let regex = /case\s+'(\w+)'/g;
@@ -157,15 +166,13 @@ async function handleCase(sock, message) {
       while ((match = regex.exec(sourceCode)) !== null) {
         builtInMatches.push(match[1]);
       }
-      // Hilangkan duplikat (jika ada)
-      builtInMatches = Array.from(new Set(builtInMatches));
+      builtInMatches = Array.from(new Set(builtInMatches)); // hilangkan duplikat
       let menuText = 'Menu yang tersedia:\n\n';
-      // Tampilkan built-in commands
       menuText += 'Built-in Commands:\n';
       builtInMatches.forEach((cmd, index) => {
         menuText += `${index + 1}. ${PREFIX}${cmd}\n`;
       });
-      // Tampilkan custom text commands
+      // Tambahkan custom commands
       const customTextKeys = Object.keys(customCommands.textCommands);
       if (customTextKeys.length > 0) {
         menuText += '\nCustom Text Commands:\n';
@@ -173,7 +180,6 @@ async function handleCase(sock, message) {
           menuText += `${i + 1}. ${PREFIX}${cmd}\n`;
         });
       }
-      // Tampilkan custom plugin commands
       const customPluginKeys = Object.keys(customCommands.pluginCommands);
       if (customPluginKeys.length > 0) {
         menuText += '\nCustom Plugin Commands:\n';
@@ -181,7 +187,7 @@ async function handleCase(sock, message) {
           menuText += `${i + 1}. ${PREFIX}${cmd}\n`;
         });
       }
-      // Tampilkan commands dari folder plugins
+      // Tambahkan perintah dari folder plugins
       if (plugins.size > 0) {
         menuText += '\nPlugin Commands:\n';
         let i = 1;
@@ -210,15 +216,30 @@ async function handleCase(sock, message) {
       console.log(chalk.green("Bot sedang restart..."));
       process.exit(0);
       return;
-    case 'update':
-      response = 'Fitur update belum diimplementasikan di perintah ini.';
-      break;
+    case 'update': {
+      // Fitur update hanya mengupdate file base: case.js dan index.js
+      const remoteCaseUrl = 'https://raw.githubusercontent.com/Marshalyel/Mars/master/case.js';
+      const remoteIndexUrl = 'https://raw.githubusercontent.com/Marshalyel/Mars/master/index.js';
+      if (args.length > 0) {
+        if (args[0].toLowerCase() === 'case') {
+          await updateFile(sock, message, 'case.js', remoteCaseUrl);
+        } else if (args[0].toLowerCase() === 'index') {
+          await updateFile(sock, message, 'index.js', remoteIndexUrl);
+        } else {
+          response = 'Parameter update tidak dikenali. Gunakan "case" atau "index".';
+        }
+      } else {
+        // Update kedua file jika tidak ada parameter
+        await updateFile(sock, message, 'case.js', remoteCaseUrl);
+        await updateFile(sock, message, 'index.js', remoteIndexUrl);
+      }
+      return;
+    }
     default:
       response = 'Maaf, perintah tidak dikenali. Ketik "!menu" untuk melihat pilihan.';
       break;
   }
 
-  // Kirim balasan jika ada response dari built-in switch-case
   if (response) {
     sock.sendMessage(chatId, { text: response })
       .then(() => console.log(chalk.green("Balasan terkirim:"), response))
