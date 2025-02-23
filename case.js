@@ -1,11 +1,11 @@
 // case.js
-
+//Mars
 const chalk = require('chalk');
 const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
 
-// Fungsi updateFile untuk mengambil konten file dari URL remote dan menimpanya secara lokal.
+// Fungsi updateFile: mengambil konten remote dan menimpanya secara lokal.
 async function updateFile(sock, message, fileName, remoteUrl) {
   const chatId = message.key.remoteJid;
   try {
@@ -21,10 +21,32 @@ async function updateFile(sock, message, fileName, remoteUrl) {
   }
 }
 
-// Load plugin (jika ada) dari folder plugins
+// Fungsi updatePlugins: mengambil daftar file plugin dari GitHub menggunakan API
+// dan menimpa seluruh file di folder plugins secara otomatis.
+async function updatePlugins(sock, message) {
+  const pluginsPath = path.join(__dirname, 'plugins');
+  if (!fs.existsSync(pluginsPath)) {
+    fs.mkdirSync(pluginsPath);
+  }
+  try {
+    const apiUrl = 'https://api.github.com/repos/Marshalyel/Mars/contents/plugins';
+    const response = await axios.get(apiUrl);
+    const files = response.data;
+    for (const fileObj of files) {
+      if (fileObj.type === 'file' && fileObj.name.endsWith('.js')) {
+        const remoteUrl = fileObj.download_url; // URL langsung ke file
+        await updateFile(sock, message, path.join('plugins', fileObj.name), remoteUrl);
+      }
+    }
+  } catch (error) {
+    console.error(chalk.red("Gagal memperbarui plugins:"), error);
+    await sock.sendMessage(message.key.remoteJid, { text: "Gagal memperbarui plugins." });
+  }
+}
+
+// Load plugin dari folder plugins
 const plugins = new Map();
 const pluginsDir = path.join(__dirname, 'plugins');
-
 if (fs.existsSync(pluginsDir)) {
   fs.readdirSync(pluginsDir).forEach(file => {
     if (file.endsWith('.js')) {
@@ -37,7 +59,7 @@ if (fs.existsSync(pluginsDir)) {
   });
 }
 
-// Definisikan array prefix yang diizinkan
+// Definisikan array prefix yang diizinkan (misalnya: "!", ".", "/")
 const MULTI_PREFIX = ['!', '.', '/'];
 
 // Muat custom commands dari file eksternal (jika ada)
@@ -70,7 +92,6 @@ async function handleCase(sock, message) {
     console.log(chalk.red("Pesan tanpa teks diterima, tidak diproses."));
     return;
   }
-
   text = text.trim();
 
   // Cek apakah pesan diawali dengan salah satu prefix yang diizinkan
@@ -86,16 +107,12 @@ async function handleCase(sock, message) {
     return;
   }
 
-  // Pisahkan perintah dan argumen berdasarkan prefix yang digunakan
   const args = text.slice(usedPrefix.length).trim().split(/ +/);
   const command = args.shift().toLowerCase();
-
   console.log(chalk.cyan("Perintah yang terdeteksi:"), command);
   if (args.length > 0) console.log(chalk.cyan("Argumen:"), args);
 
-  // --- Proses penambahan perintah dinamis tanpa mengubah struktur switch-case ---
-
-  // Tambah perintah statis baru: !addcase nama | teks_balasan
+  // Tambah custom text command: !addcase nama | teks_balasan
   if (command === 'addcase') {
     const rest = args.join(" ");
     const parts = rest.split(" | ");
@@ -112,7 +129,7 @@ async function handleCase(sock, message) {
     return sock.sendMessage(chatId, { text: `Command "${name}" berhasil ditambahkan.` });
   }
 
-  // Tambah plugin baru: !addplugin nama | kode_javascript
+  // Tambah custom plugin command: !addplugin nama | kode_javascript
   if (command === 'addplugin') {
     const rest = args.join(" ");
     const parts = rest.split(" | ");
@@ -129,11 +146,12 @@ async function handleCase(sock, message) {
     return sock.sendMessage(chatId, { text: `Plugin "${name}" berhasil ditambahkan.` });
   }
 
-  // Eksekusi perintah dari custom commands jika ada
+  // Eksekusi custom text command jika ada
   if (customCommands.textCommands[command]) {
     const resp = customCommands.textCommands[command];
     return sock.sendMessage(chatId, { text: resp });
   }
+  // Eksekusi custom plugin command jika ada
   if (customCommands.pluginCommands[command]) {
     try {
       const func = new Function('sock', 'message', 'args', customCommands.pluginCommands[command]);
@@ -147,7 +165,7 @@ async function handleCase(sock, message) {
     return;
   }
 
-  // Eksekusi perintah dari plugin folder jika tersedia
+  // Eksekusi perintah dari folder plugins jika ada
   if (plugins.has(command)) {
     const plugin = plugins.get(command);
     console.log(chalk.blue(`Menjalankan plugin untuk perintah: ${command}`));
@@ -159,7 +177,7 @@ async function handleCase(sock, message) {
 
   let response = '';
 
-  // --- Switch-case built-in (struktur tidak diubah) ---
+  // Switch-case built-in (struktur tidak diubah)
   switch (command) {
     case 'halo':
       response = 'Halo! Apa kabar?';
@@ -225,7 +243,7 @@ async function handleCase(sock, message) {
       process.exit(0);
       return;
     case 'update': {
-      // Fitur update hanya mengupdate file base: case.js dan index.js
+      // Fitur update: mendukung parameter "case", "index", dan "plugins"
       const remoteCaseUrl = 'https://raw.githubusercontent.com/Marshalyel/Mars/master/case.js';
       const remoteIndexUrl = 'https://raw.githubusercontent.com/Marshalyel/Mars/master/index.js';
       if (args.length > 0) {
@@ -233,12 +251,15 @@ async function handleCase(sock, message) {
           await updateFile(sock, message, 'case.js', remoteCaseUrl);
         } else if (args[0].toLowerCase() === 'index') {
           await updateFile(sock, message, 'index.js', remoteIndexUrl);
+        } else if (args[0].toLowerCase() === 'plugins') {
+          await updatePlugins(sock, message);
         } else {
-          response = 'Parameter update tidak dikenali. Gunakan "case" atau "index".';
+          response = 'Parameter update tidak dikenali. Gunakan "case", "index", atau "plugins".';
         }
       } else {
         await updateFile(sock, message, 'case.js', remoteCaseUrl);
         await updateFile(sock, message, 'index.js', remoteIndexUrl);
+        await updatePlugins(sock, message);
       }
       return;
     }
