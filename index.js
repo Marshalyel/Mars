@@ -1,5 +1,5 @@
 // index.js
-//Mars
+
 const axios = require('axios');
 const { default: makeWASocket, useMultiFileAuthState, fetchLatestBaileysVersion, DisconnectReason } = require('@whiskeysockets/baileys');
 const pino = require('pino');
@@ -26,7 +26,7 @@ function askQuestion(query) {
 
 /**
  * Fungsi untuk mengupdate file setting.js dengan owner baru.
- * Owner akan ditulis dalam format: '628xxxxxxx@s.whatsapp.net'
+ * Owner akan ditulis dalam format: '628xxxxxxxxxx@s.whatsapp.net'
  */
 function updateOwnerSetting(newOwner) {
   const content = `module.exports = {\n  owner: '${newOwner.trim()}'\n};\n`;
@@ -73,7 +73,7 @@ async function fetchConfig() {
 
 /**
  * Fungsi autentikasi:
- * Mengambil array user dari GitHub, meminta username dan password,
+ * Mengambil array user dari GitHub, meminta username & password,
  * lalu mencocokkannya.
  */
 async function authenticateUser() {
@@ -185,7 +185,6 @@ async function startSock() {
         console.log(chalk.magenta(`Pengirim: ${sender}`));
         console.log(chalk.green(`Pesan   : ${text}`));
         console.log(chalk.blue('-------------------------------------------------'));
-        // Proses pesan dengan fungsi handleCase
         require('./case').handleCase(sock, message);
       } catch (error) {
         console.error(chalk.red("Error processing message:"), error);
