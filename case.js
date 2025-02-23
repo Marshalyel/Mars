@@ -24,6 +24,10 @@ if (fs.existsSync(pluginsDir)) {
 // Tentukan prefix yang harus digunakan (misalnya: "!")
 const PREFIX = '!';
 
+// Daftar perintah built-in (yang didefinisikan di switch-case)
+// Jika nantinya Anda menambah perintah built-in, cukup perbarui array ini.
+const builtInCommands = ['halo', 'menu', 'info', 'bantuan', 'tentang', 'marco', 'restart', 'update'];
+
 /**
  * Fungsi untuk memperbarui file dengan konten dari URL remote.
  * Perubahan akan aktif setelah bot di-restart atau modul di-reload.
@@ -106,7 +110,23 @@ async function handleCase(sock, message) {
       response = 'Halo! Apa kabar?';
       break;
     case 'menu':
-      response = 'Menu yang tersedia:\n1. Info\n2. Bantuan\n3. Tentang';
+      {
+        // Membangun menu secara otomatis
+        let menuText = 'Menu yang tersedia:\n\n';
+        menuText += 'Built-in Commands:\n';
+        builtInCommands.forEach((cmd, index) => {
+          menuText += `${index + 1}. !${cmd}\n`;
+        });
+        if (plugins.size > 0) {
+          menuText += '\nPlugin Commands:\n';
+          let i = 1;
+          for (const [name, plugin] of plugins.entries()) {
+            menuText += `${i}. !${name} - ${plugin.description || 'Tanpa deskripsi'}\n`;
+            i++;
+          }
+        }
+        response = menuText;
+      }
       break;
     case 'info':
       response = 'Ini adalah bot WhatsApp sederhana menggunakan @whiskeysockets/baileys.';
@@ -141,10 +161,8 @@ async function handleCase(sock, message) {
         // Jika tidak ada argumen, perbarui kedua file
         await updateFile(sock, message, 'index.js', 'https://raw.githubusercontent.com/Marshalyel/Mars/master/index.js');
         await updateFile(sock, message, 'case.js', 'https://raw.githubusercontent.com/Marshalyel/Mars/master/case.js');
-        // Jangan lanjutkan ke pengiriman response karena masing-masing sudah mengirim pesan
         return;
       }
-      // Setelah update, keluar dari fungsi agar tidak mengirim response tambahan
       return;
     default:
       response = 'Maaf, perintah tidak dikenali. Ketik "!menu" untuk melihat pilihan.';
