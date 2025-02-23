@@ -7,33 +7,21 @@ const chalk = require('chalk');
 const qrcode = require('qrcode-terminal');
 const readline = require('readline');
 const fs = require('fs');
+const path = require('path');
 
-// Impor fungsi penanganan pesan (pastikan file case.js sudah disiapkan)
+// Import setting.js
+let settings = require('./setting');
+
+// Impor fungsi handleCase (pastikan file case.js sudah disiapkan)
 const { handleCase } = require('./case');
 
 /**
- * Mengambil konfigurasi (array user) dari GitHub menggunakan axios.
- * URL harus mengarah ke file JSON raw yang valid dan berbentuk array.
- */
-async function fetchConfig() {
-  const url = 'https://raw.githubusercontent.com/latesturl/dbRaolProjects/main/dbconfig.json';
-  try {
-    const response = await axios.get(url);
-    console.log(chalk.gray("DEBUG: Fetched config data:"), JSON.stringify(response.data, null, 2));
-    return response.data;
-  } catch (error) {
-    console.error(chalk.red('Failed to fetch config:'), error);
-    return null;
-  }
-}
-
-/**
- * Meminta input dari terminal menggunakan modul readline.
+ * Fungsi untuk meminta input dari terminal.
  */
 function askQuestion(query) {
   const rl = readline.createInterface({
     input: process.stdin,
-    output: process.stdout,
+    output: process.stdout
   });
   return new Promise(resolve => rl.question(query, ans => {
     rl.close();
@@ -42,10 +30,116 @@ function askQuestion(query) {
 }
 
 /**
+ * Menu Setting: Update file setting.js (misal: nomor owner)
+ */
+async function updateSetting() {
+  console.log(chalk.yellow("\n-- Setting --"));
+  console.log("Setting saat ini:");
+  console.log("Owner: " + settings.owner);
+  const newOwner = await askQuestion("Masukkan nomor owner baru (format: 628xxxxxxxxxx@s.whatsapp.net) atau tekan Enter untuk membatalkan: ");
+  if (newOwner.trim() !== "") {
+    // Buat isi file setting.js baru
+    const content = `module.exports = {\n  owner: '${newOwner.trim()}'\n};\n`;
+    fs.writeFileSync(path.join(__dirname, 'setting.js'), content, 'utf8');
+    console.log(chalk.green("Setting telah diperbarui."));
+    // Muat ulang setting
+    delete require.cache[require.resolve('./setting')];
+    settings = require('./setting');
+  } else {
+    console.log(chalk.gray("Tidak ada perubahan."));
+  }
+  // Kembali ke menu utama
+  await mainMenu();
+}
+
+/**
+ * Fungsi untuk memulai koneksi WhatsApp.
+ */
+async function startSock() {
+  try {
+    // Cek apakah state autentikasi sudah tersedia
+    const authDir = 'auth_info';
+    if (!fs.existsSync(authDir) || fs.readdirSync(authDir).length === 0) {
+      // Jika belum ada state, lakukan autentikasi
+      await authenticateUser();
+    } else {
+      console.log(chalk.green("Sesi terdeteksi, melewati proses login."));
+    }
+
+    // Inisialisasi state autentikasi dan ambil versi terbaru dari Baileys
+    const { state, saveCreds } = await useMultiFileAuthState(authDir);
+    const { version } = await fetchLatestBaileysVersion();
+
+    // Buat instance socket WhatsApp
+    const sock = makeWASocket({
+      logger: pino({ level: 'silent' }),
+      printQRInTerminal: false,
+      auth: state,
+      version
+    });
+
+    // Simpan kredensial jika terjadi update
+    sock.ev.on('creds.update', saveCreds);
+
+    // Tangani update koneksi
+    sock.ev.on('connection.update', (update) => {
+      const { connection, lastDisconnect, qr, pairing } = update;
+      if (qr) {
+        qrcode.generate(qr, { small: true });
+        console.log(chalk.yellow("Scan QR Code di atas untuk masuk ke WhatsApp!"));
+      }
+      if (pairing) {
+        console.log(chalk.green("Gunakan pairing code: " + pairing.pairingCode));
+      }
+      if (connection === 'close') {
+        const shouldReconnect = (lastDisconnect.error)?.output?.statusCode !== DisconnectReason.loggedOut;
+        console.log(chalk.red("Koneksi terputus:"), lastDisconnect.error, "Reconnect:", shouldReconnect);
+        if (shouldReconnect) {
+          setTimeout(() => startSock(), 3000);
+        }
+      } else if (connection === 'open') {
+        console.log(chalk.green("Koneksi berhasil terbuka"));
+      }
+    });
+
+    // Tangani pesan masuk
+    sock.ev.on('messages.upsert', async m => {
+      try {
+        const message = m.messages[0];
+        if (!message.message || message.key.fromMe) return;
+        const sender = message.key.remoteJid;
+        const timestamp = new Date().toLocaleString();
+        let text = '';
+        if (message.message.conversation) {
+          text = message.message.conversation;
+        } else if (message.message.extendedTextMessage) {
+          text = message.message.extendedTextMessage.text;
+        }
+        console.log(chalk.blue('-------------------------------------------------'));
+        console.log(chalk.yellow(`Waktu   : ${timestamp}`));
+        console.log(chalk.magenta(`Pengirim: ${sender}`));
+        console.log(chalk.green(`Pesan   : ${text}`));
+        console.log(chalk.blue('-------------------------------------------------'));
+        // Proses pesan dengan fungsi handleCase
+        handleCase(sock, message);
+      } catch (error) {
+        console.error(chalk.red("Error processing message:"), error);
+      }
+    });
+
+    // Mulai polling untuk memeriksa pembaruan kode setiap 1 menit
+    setInterval(() => {
+      checkForRemoteUpdates(sock);
+    }, 60000);
+
+  } catch (error) {
+    console.error(chalk.red("Error in startSock:"), error);
+  }
+}
+
+/**
  * Fungsi autentikasi:
- * - Mengambil array user dari GitHub.
- * - Meminta input username dan password.
- * - Mencari user yang cocok di dalam array.
+ * Mengambil konfigurasi user dari GitHub dan meminta input username & password.
  */
 async function authenticateUser() {
   const configData = await fetchConfig();
@@ -69,29 +163,40 @@ async function authenticateUser() {
 }
 
 /**
- * Fungsi untuk memeriksa apakah ada perubahan kode pada file remote di GitHub.
- * Normalisasi konten (trim) digunakan untuk mengabaikan perbedaan whitespace.
- * Jika terdapat perbedaan, bot akan mengirim peringatan ke nomor owner.
- *
- * @param {Object} sock - Instance WhatsApp socket dari Baileys.
+ * Fungsi untuk mengambil konfigurasi user dari GitHub.
+ */
+async function fetchConfig() {
+  const url = 'https://raw.githubusercontent.com/latesturl/dbRaolProjects/main/dbconfig.json';
+  try {
+    const response = await axios.get(url);
+    console.log(chalk.gray("DEBUG: Fetched config data:"), JSON.stringify(response.data, null, 2));
+    return response.data;
+  } catch (error) {
+    console.error(chalk.red('Failed to fetch config:'), error);
+    return null;
+  }
+}
+
+/**
+ * Fungsi untuk memeriksa pembaruan file remote (index.js dan case.js).
+ * Normalisasi konten dengan trim() agar perbedaan whitespace tidak terdeteksi.
  */
 async function checkForRemoteUpdates(sock) {
   const filesToCheck = [
     { localFile: 'index.js', remoteUrl: 'https://raw.githubusercontent.com/Marshalyel/Mars/master/index.js' },
     { localFile: 'case.js', remoteUrl: 'https://raw.githubusercontent.com/Marshalyel/Mars/master/case.js' }
   ];
-
   for (const fileObj of filesToCheck) {
     try {
       const remoteResponse = await axios.get(fileObj.remoteUrl);
       let remoteContent = remoteResponse.data.trim();
       let localContent = fs.readFileSync(fileObj.localFile, 'utf8').trim();
       if (localContent !== remoteContent) {
-        const ownerJid = '6281523772093@s.whatsapp.net';
+        const ownerJid = settings.owner;
         const warnMessage = `Peringatan: Terdeteksi perubahan kode pada ${fileObj.localFile} di GitHub. Silakan lakukan !update.`;
         await sock.sendMessage(ownerJid, { text: warnMessage });
         console.log(chalk.yellow(`Peringatan dikirim ke ${ownerJid} karena ${fileObj.localFile} berbeda.`));
-        break; // Hanya mengirim satu peringatan untuk menghindari spam
+        break;
       }
     } catch (error) {
       console.error(chalk.red(`Gagal memeriksa pembaruan untuk ${fileObj.localFile}:`), error);
@@ -100,88 +205,31 @@ async function checkForRemoteUpdates(sock) {
 }
 
 /**
- * Fungsi utama untuk memulai koneksi WhatsApp.
+ * Menu utama di console.
  */
-async function startSock() {
-  try {
-    // Cek apakah state autentikasi sudah tersedia
-    const authDir = 'auth_info';
-    if (!fs.existsSync(authDir) || fs.readdirSync(authDir).length === 0) {
-      // Jika belum ada state, lakukan autentikasi
-      await authenticateUser();
-    } else {
-      console.log(chalk.green("Sesi terdeteksi, melewati proses login."));
-    }
-
-    // Inisialisasi state autentikasi dan ambil versi terbaru dari Baileys
-    const { state, saveCreds } = await useMultiFileAuthState(authDir);
-    const { version } = await fetchLatestBaileysVersion();
-
-    // Buat instance socket WhatsApp
-    const sock = makeWASocket({
-      logger: pino({ level: 'silent' }),
-      printQRInTerminal: false, // QR Code akan ditampilkan manual
-      auth: state,
-      version
-    });
-
-    // Simpan kredensial jika terjadi update
-    sock.ev.on('creds.update', saveCreds);
-
-    // Tangani update koneksi, tampilkan QR Code dan pairing code jika ada
-    sock.ev.on('connection.update', (update) => {
-      const { connection, lastDisconnect, qr, pairing } = update;
-      if (qr) {
-        qrcode.generate(qr, { small: true });
-        console.log(chalk.yellow("Scan QR Code di atas untuk masuk ke WhatsApp!"));
-      }
-      if (pairing) {
-        console.log(chalk.green("Gunakan pairing code berikut untuk terhubung: " + pairing.pairingCode));
-      }
-      if (connection === 'close') {
-        const shouldReconnect = (lastDisconnect.error)?.output?.statusCode !== DisconnectReason.loggedOut;
-        console.log(chalk.red("Koneksi terputus:"), lastDisconnect.error, "Reconnect:", shouldReconnect);
-        if (shouldReconnect) {
-          setTimeout(() => startSock(), 3000);
-        }
-      } else if (connection === 'open') {
-        console.log(chalk.green("Koneksi berhasil terbuka"));
-      }
-    });
-
-    // Tangani pesan masuk dan proses menggunakan handleCase
-    sock.ev.on('messages.upsert', async m => {
-      try {
-        const message = m.messages[0];
-        if (!message.message || message.key.fromMe) return;
-        const sender = message.key.remoteJid;
-        const timestamp = new Date().toLocaleString();
-        let text = '';
-        if (message.message.conversation) {
-          text = message.message.conversation;
-        } else if (message.message.extendedTextMessage) {
-          text = message.message.extendedTextMessage.text;
-        }
-        console.log(chalk.blue('-------------------------------------------------'));
-        console.log(chalk.yellow(`Waktu   : ${timestamp}`));
-        console.log(chalk.magenta(`Pengirim: ${sender}`));
-        console.log(chalk.green(`Pesan   : ${text}`));
-        console.log(chalk.blue('-------------------------------------------------'));
-        handleCase(sock, message);
-      } catch (error) {
-        console.error(chalk.red("Error processing message:"), error);
-      }
-    });
-
-    // Mulai polling untuk memeriksa pembaruan kode setiap 1 menit
-    setInterval(() => {
-      checkForRemoteUpdates(sock);
-    }, 60000);
-
-  } catch (error) {
-    console.error(chalk.red("Error in startSock:"), error);
+async function mainMenu() {
+  console.clear();
+  console.log(chalk.blue("=========================================="));
+  console.log(chalk.blue("         CONSOLE MENU BOT WHATSAPP        "));
+  console.log(chalk.blue("=========================================="));
+  console.log("Owner: " + settings.owner);
+  console.log("1. Interaksi (Bot berjalan & berinteraksi)");
+  console.log("2. Setting (Ubah konfigurasi, misal nomor owner)");
+  console.log("3. Exit");
+  const choice = await askQuestion("Pilih opsi (1/2/3): ");
+  if (choice.trim() === "1") {
+    // Jalankan bot (interaksi)
+    startSock();
+  } else if (choice.trim() === "2") {
+    await updateSetting();
+  } else if (choice.trim() === "3") {
+    console.log(chalk.green("Keluar..."));
+    process.exit(0);
+  } else {
+    console.log(chalk.red("Pilihan tidak valid."));
+    await mainMenu();
   }
 }
 
-// Jalankan fungsi utama
-startSock();
+// Mulai dengan menampilkan menu utama
+mainMenu();
