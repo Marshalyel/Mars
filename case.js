@@ -25,26 +25,26 @@ if (fs.existsSync(pluginsDir)) {
 const PREFIX = '!';
 
 /**
- * Fungsi untuk memperbarui file case.js dengan konten dari URL remote.
- * Update hanya akan mengganti file secara lokal, perubahan akan aktif
- * setelah bot di-restart atau modul di-reload.
+ * Fungsi untuk memperbarui file dengan konten dari URL remote.
+ * Perubahan akan aktif setelah bot di-restart atau modul di-reload.
  *
  * @param {Object} sock - Instance WhatsApp socket dari Baileys
  * @param {Object} message - Objek pesan dari Baileys
+ * @param {string} fileName - Nama file yang akan diperbarui (misalnya: 'index.js' atau 'case.js')
+ * @param {string} remoteUrl - URL remote yang menyediakan konten file terbaru
  */
-async function updateCaseFile(sock, message) {
+async function updateFile(sock, message, fileName, remoteUrl) {
   const chatId = message.key.remoteJid;
-  const url = 'https://raw.githubusercontent.com/Marshalyel/Mars/master/case.js';
   try {
-    const response = await axios.get(url);
+    const response = await axios.get(remoteUrl);
     const newContent = response.data;
-    const localPath = __filename; // file ini adalah case.js
+    const localPath = path.join(__dirname, fileName);
     fs.writeFileSync(localPath, newContent, 'utf8');
-    await sock.sendMessage(chatId, { text: 'case.js telah diperbarui. Silakan restart bot untuk menerapkan perubahan.' });
-    console.log(chalk.green('case.js updated successfully.'));
+    await sock.sendMessage(chatId, { text: `${fileName} telah diperbarui.` });
+    console.log(chalk.green(`${fileName} updated successfully.`));
   } catch (error) {
-    console.error(chalk.red('Gagal memperbarui case.js:'), error);
-    await sock.sendMessage(chatId, { text: 'Gagal memperbarui case.js.' });
+    console.error(chalk.red(`Gagal memperbarui ${fileName}:`), error);
+    await sock.sendMessage(chatId, { text: `Gagal memperbarui ${fileName}.` });
   }
 }
 
@@ -55,7 +55,7 @@ async function updateCaseFile(sock, message) {
  * @param {Object} sock - Instance WhatsApp socket dari Baileys
  * @param {Object} message - Objek pesan dari Baileys
  */
-function handleCase(sock, message) {
+async function handleCase(sock, message) {
   // Dapatkan ID chat (remoteJid)
   const chatId = message.key.remoteJid;
   let text = '';
@@ -112,29 +112,39 @@ function handleCase(sock, message) {
       response = 'Ini adalah bot WhatsApp sederhana menggunakan @whiskeysockets/baileys.';
       break;
     case 'bantuan':
-      response = 'Silakan ketik perintah: !halo, !menu, !info, !bantuan, atau !tentang.';
+      response = 'Silakan ketik perintah: !halo, !menu, !info, !bantuan, !tentang, !marco, !restart, atau !update.';
       break;
     case 'tentang':
       response = 'Bot ini dibuat untuk demonstrasi penggunaan @whiskeysockets/baileys dengan prefix command.';
       break;
-    case 'update':
-      // Jalankan fungsi update untuk case.js
-      updateCaseFile(sock, message);
-      return;
     case 'marco':
       // Fitur Marco Polo: jika perintah adalah 'marco', balas dengan 'polo'
       response = 'polo';
       break;
     case 'restart':
       // Fitur restart: kirim pesan konfirmasi, lalu restart bot dengan exit process.
-      sock.sendMessage(chatId, { text: 'Bot sedang restart...' })
-        .then(() => {
-          console.log(chalk.green("Bot sedang restart..."));
-          process.exit(0);
-        })
-        .catch(err => {
-          console.error(chalk.red("Gagal mengirim pesan restart:"), err);
-        });
+      await sock.sendMessage(chatId, { text: 'Bot sedang restart...' });
+      console.log(chalk.green("Bot sedang restart..."));
+      process.exit(0);
+      return;
+    case 'update':
+      // Fitur update: periksa argumen untuk menentukan file yang akan diperbarui
+      if (args.length > 0) {
+        if (args[0] === 'index') {
+          await updateFile(sock, message, 'index.js', 'https://raw.githubusercontent.com/Marshalyel/Mars/master/index.js');
+        } else if (args[0] === 'case') {
+          await updateFile(sock, message, 'case.js', 'https://raw.githubusercontent.com/Marshalyel/Mars/master/case.js');
+        } else {
+          response = 'Parameter update tidak dikenali. Gunakan "index" atau "case".';
+        }
+      } else {
+        // Jika tidak ada argumen, perbarui kedua file
+        await updateFile(sock, message, 'index.js', 'https://raw.githubusercontent.com/Marshalyel/Mars/master/index.js');
+        await updateFile(sock, message, 'case.js', 'https://raw.githubusercontent.com/Marshalyel/Mars/master/case.js');
+        // Jangan lanjutkan ke pengiriman response karena masing-masing sudah mengirim pesan
+        return;
+      }
+      // Setelah update, keluar dari fungsi agar tidak mengirim response tambahan
       return;
     default:
       response = 'Maaf, perintah tidak dikenali. Ketik "!menu" untuk melihat pilihan.';
