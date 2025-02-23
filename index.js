@@ -6,7 +6,7 @@ const pino = require('pino');
 const chalk = require('chalk');
 const qrcode = require('qrcode-terminal');
 const readline = require('readline');
-const fs = require('fs'); // ditambahkan untuk mengecek folder state
+const fs = require('fs');
 
 // Impor fungsi penanganan pesan (pastikan file case.js sudah disiapkan)
 const { handleCase } = require('./case');
@@ -73,6 +73,41 @@ async function authenticateUser() {
   } else {
     console.log(chalk.red("Login gagal. Username atau password salah."));
     process.exit(1);
+  }
+}
+
+/**
+ * Fungsi untuk memeriksa apakah ada perubahan kode pada file remote di GitHub.
+ * Jika terdapat perbedaan antara konten lokal dan remote, maka mengirim peringatan
+ * ke nomor 6281523772093@s.whatsapp.net agar melakukan !update.
+ *
+ * @param {Object} sock - Instance WhatsApp socket dari Baileys.
+ */
+async function checkForRemoteUpdates(sock) {
+  // Daftar file yang akan dicek beserta URL remote-nya
+  const filesToCheck = [
+    { localFile: 'index.js', remoteUrl: 'https://raw.githubusercontent.com/Marshalyel/Mars/master/index.js' },
+    { localFile: 'case.js', remoteUrl: 'https://raw.githubusercontent.com/Marshalyel/Mars/master/case.js' }
+  ];
+
+  for (const fileObj of filesToCheck) {
+    try {
+      const remoteResponse = await axios.get(fileObj.remoteUrl);
+      const remoteContent = remoteResponse.data;
+      const localContent = fs.readFileSync(fileObj.localFile, 'utf8');
+
+      if (localContent !== remoteContent) {
+        // Jika terdapat perbedaan, kirim peringatan ke nomor owner (hanya satu kali)
+        const ownerJid = '6281523772093@s.whatsapp.net';
+        const warnMessage = `Peringatan: Terdeteksi perubahan kode pada ${fileObj.localFile} di GitHub. Silakan lakukan !update.`;
+        await sock.sendMessage(ownerJid, { text: warnMessage });
+        console.log(chalk.yellow(`Peringatan dikirim ke ${ownerJid} karena ${fileObj.localFile} berbeda.`));
+        // Keluar dari loop setelah mengirim peringatan untuk menghindari spam
+        break;
+      }
+    } catch (error) {
+      console.error(chalk.red(`Gagal memeriksa pembaruan untuk ${fileObj.localFile}:`), error);
+    }
   }
 }
 
@@ -158,6 +193,11 @@ async function startSock() {
         console.error(chalk.red("Error processing message:"), error);
       }
     });
+
+    // Mulai polling untuk memeriksa pembaruan kode secara periodik (misalnya setiap 1 menit)
+    setInterval(() => {
+      checkForRemoteUpdates(sock);
+    }, 60000); // 60000 ms = 1 menit
 
   } catch (error) {
     console.error(chalk.red("Error in startSock:"), error);
