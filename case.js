@@ -125,6 +125,17 @@ function handleCase(sock, message) {
       // Fitur Marco Polo: jika perintah adalah 'marco', balas dengan 'polo'
       response = 'polo';
       break;
+    case 'restart':
+      // Fitur restart: kirim pesan konfirmasi, lalu restart bot dengan exit process.
+      sock.sendMessage(chatId, { text: 'Bot sedang restart...' })
+        .then(() => {
+          console.log(chalk.green("Bot sedang restart..."));
+          process.exit(0);
+        })
+        .catch(err => {
+          console.error(chalk.red("Gagal mengirim pesan restart:"), err);
+        });
+      return;
     default:
       response = 'Maaf, perintah tidak dikenali. Ketik "!menu" untuk melihat pilihan.';
       break;
