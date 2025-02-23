@@ -1,5 +1,5 @@
 // index.js
-
+//Mars
 const axios = require('axios');
 const { default: makeWASocket, useMultiFileAuthState, fetchLatestBaileysVersion, DisconnectReason } = require('@whiskeysockets/baileys');
 const pino = require('pino');
@@ -12,7 +12,9 @@ const path = require('path');
 // Load konfigurasi owner dari setting.js
 let settings = require('./setting');
 
-// Fungsi untuk meminta input dari terminal
+/**
+ * Fungsi untuk meminta input dari terminal.
+ */
 function askQuestion(query) {
   const rl = readline.createInterface({
     input: process.stdin,
@@ -32,7 +34,6 @@ function updateOwnerSetting(newOwner) {
   const content = `module.exports = {\n  owner: '${newOwner.trim()}'\n};\n`;
   fs.writeFileSync(path.join(__dirname, 'setting.js'), content, 'utf8');
   console.log(chalk.green("Setting telah diperbarui dengan owner: " + newOwner));
-  // Muat ulang setting
   delete require.cache[require.resolve('./setting')];
   settings = require('./setting');
 }
@@ -72,9 +73,8 @@ async function fetchConfig() {
 }
 
 /**
- * Fungsi autentikasi:
- * Mengambil array user dari GitHub, meminta username & password,
- * lalu mencocokkannya.
+ * Fungsi autentikasi: mengambil array user, meminta username & password,
+ * dan mencocokkan kredensial.
  */
 async function authenticateUser() {
   const configData = await fetchConfig();
@@ -98,14 +98,17 @@ async function authenticateUser() {
 }
 
 /**
- * Fungsi untuk memeriksa pembaruan file remote (index.js dan case.js).
- * Normalisasi konten (trim) untuk mengabaikan perbedaan whitespace.
+ * Fungsi untuk memeriksa pembaruan file remote pada index.js, case.js, 
+ * serta file-file dalam folder plugins.
+ * Normalisasi konten (trim) digunakan untuk mengabaikan perbedaan whitespace.
+ * Jika ada perbedaan, owner akan diberitahu via pesan WhatsApp.
  */
 async function checkForRemoteUpdates(sock) {
   const filesToCheck = [
     { localFile: 'index.js', remoteUrl: 'https://raw.githubusercontent.com/Marshalyel/Mars/master/index.js' },
     { localFile: 'case.js', remoteUrl: 'https://raw.githubusercontent.com/Marshalyel/Mars/master/case.js' }
   ];
+
   for (const fileObj of filesToCheck) {
     try {
       const remoteResponse = await axios.get(fileObj.remoteUrl);
@@ -116,10 +119,33 @@ async function checkForRemoteUpdates(sock) {
         const warnMessage = `Peringatan: Terdeteksi perubahan kode pada ${fileObj.localFile} di GitHub. Silakan lakukan !update.`;
         await sock.sendMessage(ownerJid, { text: warnMessage });
         console.log(chalk.yellow(`Peringatan dikirim ke ${ownerJid} karena ${fileObj.localFile} berbeda.`));
-        break;
+        break; // Mengirim satu peringatan untuk menghindari spam
       }
     } catch (error) {
       console.error(chalk.red(`Gagal memeriksa pembaruan untuk ${fileObj.localFile}:`), error);
+    }
+  }
+
+  // Cek pembaruan pada folder plugins
+  const pluginsPath = path.join(__dirname, 'plugins');
+  if (fs.existsSync(pluginsPath)) {
+    const pluginFiles = fs.readdirSync(pluginsPath).filter(file => file.endsWith('.js'));
+    for (const file of pluginFiles) {
+      try {
+        const remoteUrl = 'https://raw.githubusercontent.com/Marshalyel/Mars/master/plugins/' + file;
+        const remoteResponse = await axios.get(remoteUrl);
+        let remoteContent = remoteResponse.data.trim();
+        let localContent = fs.readFileSync(path.join(pluginsPath, file), 'utf8').trim();
+        if (localContent !== remoteContent) {
+          const ownerJid = settings.owner;
+          const warnMessage = `Peringatan: Terdeteksi perubahan kode pada plugin ${file} di GitHub. Silakan lakukan !update plugins.`;
+          await sock.sendMessage(ownerJid, { text: warnMessage });
+          console.log(chalk.yellow(`Peringatan dikirim ke ${ownerJid} karena plugin ${file} berbeda.`));
+          break;
+        }
+      } catch (error) {
+        console.error(chalk.red(`Gagal memeriksa pembaruan untuk plugin ${file}:`), error);
+      }
     }
   }
 }
@@ -191,6 +217,7 @@ async function startSock() {
       }
     });
 
+    // Mulai polling setiap 1 menit untuk memeriksa pembaruan file remote (termasuk plugin)
     setInterval(() => {
       checkForRemoteUpdates(sock);
     }, 60000);
@@ -201,7 +228,7 @@ async function startSock() {
 }
 
 /**
- * Proses utama: periksa setting owner dan kemudian jalankan bot.
+ * Proses utama: periksa setting owner dan jalankan bot.
  */
 async function main() {
   await checkOwner();
