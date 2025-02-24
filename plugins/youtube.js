@@ -5,11 +5,11 @@ const { proto, generateWAMessageFromContent, prepareWAMessageMedia } = require('
 
 module.exports = {
   name: 'youtube',
-  description: 'Melakukan pencarian video YouTube dan menampilkan hasil dalam bentuk carousel dengan tombol Download MP3 dan MP4',
+  description: 'Melakukan pencarian video YouTube dan menyediakan tombol Download MP3 & MP4',
   run: async (sock, message, args) => {
     const chatId = message.key.remoteJid;
     if (!args.length) {
-      return await sock.sendMessage(chatId, { text: 'Harap berikan query pencarian. Contoh: !youtube tutorial javascript' });
+      return await sock.sendMessage(chatId, { text: 'Harap masukkan query pencarian. Contoh: !youtube tutorial javascript' });
     }
     const query = args.join(' ');
     try {
@@ -19,19 +19,15 @@ module.exports = {
         return await sock.sendMessage(chatId, { text: 'Video tidak ditemukan!' });
       }
       
-      // Siapkan summary teks (opsional)
       let summaryText = `🔎 *Hasil Pencarian YouTube untuk:* _${query}_\n\n`;
-      videos.forEach((video) => {
-        summaryText += `*🎬 ${video.title}*\n📅 ${video.ago} | ⏳ ${video.timestamp} | 👁 ${video.views}\n🔗 ${video.url}\n\n`;
-      });
-      await sock.sendMessage(chatId, { text: summaryText });
-      
-      // Buat carousel cards
       let cards = [];
+      
       for (const video of videos) {
+        summaryText += `*🎬 ${video.title}*\n📅 ${video.ago} | ⏳ ${video.timestamp} | 👁 ${video.views}\n🔗 ${video.url}\n\n`;
+        
         let mediaMessage = {};
         try {
-          // Pastikan fungsi upload dibinding dengan benar
+          // Gunakan prepareWAMessageMedia dengan binding upload agar thumbnail bisa di-upload
           mediaMessage = await prepareWAMessageMedia(
             { image: { url: video.thumbnail } },
             { upload: sock.waUploadToServer.bind(sock) }
@@ -40,6 +36,7 @@ module.exports = {
           console.error('Error preparing thumbnail:', err);
         }
         
+        // Buat card dengan dua tombol: Download MP3 dan Download MP4
         const card = {
           header: proto.Message.InteractiveMessage.Header.fromObject({
             title: video.title,
@@ -52,14 +49,14 @@ module.exports = {
                 name: "cta_mp3",
                 buttonParamsJson: JSON.stringify({
                   display_text: "Download MP3",
-                  action: "ytmp3:" + video.url
+                  copy_text: "ytmp3:" + video.url
                 })
               },
               {
                 name: "cta_mp4",
                 buttonParamsJson: JSON.stringify({
                   display_text: "Download MP4",
-                  action: "ytmp4:" + video.url
+                  copy_text: "ytmp4:" + video.url
                 })
               }
             ]
@@ -70,6 +67,9 @@ module.exports = {
         };
         cards.push(card);
       }
+      
+      // Kirim summary teks terlebih dahulu
+      await sock.sendMessage(chatId, { text: summaryText });
       
       // Buat pesan carousel interaktif
       const interactiveMsgContent = {
@@ -90,7 +90,7 @@ module.exports = {
           }
         }
       };
-      
+
       const msg = await generateWAMessageFromContent(chatId, interactiveMsgContent, { userJid: chatId, quoted: message });
       await sock.relayMessage(chatId, msg.message, { messageId: msg.key.id });
       
