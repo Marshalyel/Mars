@@ -1,7 +1,7 @@
 // plugins/youtube.js
 
 const ytSearch = require('yt-search');
-const { proto, prepareWAMessageMedia } = require('@whiskeysockets/baileys');
+const { proto, generateWAMessageFromContent, prepareWAMessageMedia } = require('@whiskeysockets/baileys');
 
 module.exports = {
   name: 'youtube',
@@ -21,7 +21,7 @@ module.exports = {
       
       let summaryText = `🔎 *Hasil Pencarian YouTube untuk:* _${query}_\n\n`;
       let cards = [];
-
+      
       for (const video of videos) {
         summaryText += `*🎬 ${video.title}*\n📅 ${video.ago} | ⏳ ${video.timestamp} | 👁 ${video.views}\n🔗 ${video.url}\n\n`;
         
@@ -36,6 +36,7 @@ module.exports = {
           console.error('Error preparing thumbnail:', err);
         }
         
+        // Buat card untuk setiap video
         cards.push({
           header: proto.Message.InteractiveMessage.Header.fromObject({
             title: video.title,
@@ -62,7 +63,7 @@ module.exports = {
       // Kirim summary text terlebih dahulu
       await sock.sendMessage(chatId, { text: summaryText });
       
-      // Buat pesan carousel interaktif
+      // Buat pesan carousel interaktif menggunakan generateWAMessageFromContent
       const interactiveMsg = proto.Message.InteractiveMessage.fromObject({
         body: proto.Message.InteractiveMessage.Body.fromObject({
           text: `🔎 Berikut adalah hasil pencarian untuk *${query}*`
@@ -72,7 +73,7 @@ module.exports = {
         })
       });
       
-      const msg = await sock.generateMessageFromContent(chatId, {
+      const msg = await generateWAMessageFromContent(chatId, {
         viewOnceMessage: {
           message: {
             messageContextInfo: {
@@ -86,8 +87,9 @@ module.exports = {
       
       await sock.relayMessage(chatId, msg.message, { messageId: msg.key.id });
       
-      // Hapus reaksi (opsional)
+      // Opsional: hapus reaksi
       await sock.sendMessage(chatId, { react: { text: '', key: message.key } });
+      
     } catch (error) {
       console.error("Error during YouTube search:", error);
       return await sock.sendMessage(chatId, { text: 'Gagal melakukan pencarian YouTube.' });
