@@ -60,7 +60,7 @@ module.exports = {
       }
       
       // Kirim summary text terlebih dahulu
-      await sock.sendMessage(chatId, { text: summaryText });
+      await sock.sendMessage(chatId, { text: "⌛" });
       
       // Buat pesan carousel interaktif menggunakan generateWAMessageFromContent
       const interactiveMsgContent = {
