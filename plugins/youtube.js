@@ -36,7 +36,6 @@ module.exports = {
           console.error('Error preparing thumbnail:', err);
         }
         
-        // Buat card untuk setiap video
         cards.push({
           header: proto.Message.InteractiveMessage.Header.fromObject({
             title: video.title,
@@ -61,33 +60,32 @@ module.exports = {
       }
       
       // Kirim summary text terlebih dahulu
-      //await sock.sendMessage(chatId, { text: summaryText });
+      await sock.sendMessage(chatId, { text: summaryText });
       
       // Buat pesan carousel interaktif menggunakan generateWAMessageFromContent
-      const interactiveMsg = proto.Message.InteractiveMessage.fromObject({
-        body: proto.Message.InteractiveMessage.Body.fromObject({
-          text: `🔎 Berikut adalah hasil pencarian untuk *${query}*`
-        }),
-        carouselMessage: proto.Message.InteractiveMessage.CarouselMessage.fromObject({
-          cards: cards
-        })
-      });
-      
-      const msg = await generateWAMessageFromContent(chatId, {
+      const interactiveMsgContent = {
         viewOnceMessage: {
           message: {
             messageContextInfo: {
               deviceListMetadata: {},
               deviceListMetadataVersion: 2
             },
-            interactiveMessage: interactiveMsg
+            interactiveMessage: proto.Message.InteractiveMessage.fromObject({
+              body: proto.Message.InteractiveMessage.Body.fromObject({
+                text: `🔎 Berikut adalah hasil pencarian untuk *${query}*`
+              }),
+              carouselMessage: proto.Message.InteractiveMessage.CarouselMessage.fromObject({
+                cards: cards
+              })
+            })
           }
         }
-      }, { userJid: chatId, quoted: message });
-      
+      };
+
+      const msg = await generateWAMessageFromContent(chatId, interactiveMsgContent, { userJid: chatId, quoted: message });
       await sock.relayMessage(chatId, msg.message, { messageId: msg.key.id });
       
-      // Opsional: hapus reaksi
+      // Opsional: Hapus reaksi
       await sock.sendMessage(chatId, { react: { text: '', key: message.key } });
       
     } catch (error) {
