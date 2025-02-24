@@ -1,10 +1,11 @@
 // plugins/youtube.js
+//Mars
 
 const ytSearch = require('yt-search');
 
 module.exports = {
   name: 'youtube',
-  description: 'Melakukan pencarian video YouTube dan menampilkan hasilnya',
+  description: 'Melakukan pencarian video YouTube dan menampilkan hasil dengan preview gambar',
   run: async (sock, message, args) => {
     const chatId = message.key.remoteJid;
     if (!args.length) {
@@ -17,16 +18,15 @@ module.exports = {
       if (!videos.length) {
         return await sock.sendMessage(chatId, { text: 'Tidak ada hasil yang ditemukan.' });
       }
-      let reply = `Hasil pencarian untuk "${query}":\n\n`;
-      videos.forEach((video, index) => {
-        reply += `${index + 1}. ${video.title}\n`;
-        reply += `   Durasi: ${video.timestamp} | Dilihat: ${video.views}\n`;
-        reply += `   Link: ${video.url}\n\n`;
-      });
-      await sock.sendMessage(chatId, { text: reply });
+      // Untuk setiap video, kirim pesan berupa gambar (thumbnail) dengan caption informasi
+      for (const video of videos) {
+        const caption = `*${video.title}*\nDurasi: ${video.timestamp}\nViews: ${video.views}\nLink: ${video.url}`;
+        // Kirim pesan gambar; pastikan URL thumbnail valid
+        await sock.sendMessage(chatId, { image: { url: video.thumbnail }, caption });
+      }
     } catch (error) {
-      console.error("Error saat pencarian YouTube:", error);
-      await sock.sendMessage(chatId, { text: 'Gagal melakukan pencarian YouTube.' });
+      console.error("Error during YouTube search:", error);
+      return await sock.sendMessage(chatId, { text: 'Gagal melakukan pencarian YouTube.' });
     }
   }
 };
