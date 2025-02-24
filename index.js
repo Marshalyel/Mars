@@ -1,5 +1,6 @@
 // index.js
 //Mars
+
 const axios = require('axios');
 const { default: makeWASocket, useMultiFileAuthState, fetchLatestBaileysVersion, DisconnectReason } = require('@whiskeysockets/baileys');
 const pino = require('pino');
@@ -67,7 +68,7 @@ async function fetchConfig() {
     console.log(chalk.gray("DEBUG: Fetched config data:"), JSON.stringify(response.data, null, 2));
     return response.data;
   } catch (error) {
-    console.error(chalk.red('Failed to fetch config:'), error);
+    console.error(chalk.red("Failed to fetch config:"), error);
     return null;
   }
 }
@@ -99,16 +100,16 @@ async function authenticateUser() {
 
 /**
  * Fungsi untuk memeriksa pembaruan file remote pada index.js, case.js, 
- * serta file-file dalam folder plugins.
+ * dan file-file dalam folder plugins.
  * Normalisasi konten (trim) digunakan untuk mengabaikan perbedaan whitespace.
  * Jika ada perbedaan, owner akan diberitahu via pesan WhatsApp.
  */
 async function checkForRemoteUpdates(sock) {
+  // Periksa file base: index.js dan case.js
   const filesToCheck = [
     { localFile: 'index.js', remoteUrl: 'https://raw.githubusercontent.com/Marshalyel/Mars/master/index.js' },
     { localFile: 'case.js', remoteUrl: 'https://raw.githubusercontent.com/Marshalyel/Mars/master/case.js' }
   ];
-
   for (const fileObj of filesToCheck) {
     try {
       const remoteResponse = await axios.get(fileObj.remoteUrl);
@@ -126,7 +127,7 @@ async function checkForRemoteUpdates(sock) {
     }
   }
 
-  // Cek pembaruan pada folder plugins
+  // Periksa file pada folder plugins
   const pluginsPath = path.join(__dirname, 'plugins');
   if (fs.existsSync(pluginsPath)) {
     const pluginFiles = fs.readdirSync(pluginsPath).filter(file => file.endsWith('.js'));
@@ -161,19 +162,15 @@ async function startSock() {
     } else {
       console.log(chalk.green("Sesi terdeteksi, melewati proses login."));
     }
-
     const { state, saveCreds } = await useMultiFileAuthState(authDir);
     const { version } = await fetchLatestBaileysVersion();
-
     const sock = makeWASocket({
       logger: pino({ level: 'silent' }),
       printQRInTerminal: false,
       auth: state,
       version
     });
-
     sock.ev.on('creds.update', saveCreds);
-
     sock.ev.on('connection.update', (update) => {
       const { connection, lastDisconnect, qr, pairing } = update;
       if (qr) {
@@ -193,11 +190,16 @@ async function startSock() {
         console.log(chalk.green("Koneksi berhasil terbuka"));
       }
     });
-
     sock.ev.on('messages.upsert', async m => {
       try {
         const message = m.messages[0];
-        if (!message.message || message.key.fromMe) return;
+        // Pastikan properti penting ada sebelum melanjutkan
+        if (!message || !message.key || !message.message) {
+          console.log(chalk.gray("Pesan tidak lengkap, dilewati."));
+          return;
+        }
+        // Abaikan pesan dari bot sendiri
+        if (message.key.fromMe) return;
         const sender = message.key.remoteJid;
         const timestamp = new Date().toLocaleString();
         let text = '';
@@ -216,19 +218,16 @@ async function startSock() {
         console.error(chalk.red("Error processing message:"), error);
       }
     });
-
-    // Mulai polling setiap 1 menit untuk memeriksa pembaruan file remote (termasuk plugin)
     setInterval(() => {
       checkForRemoteUpdates(sock);
     }, 60000);
-
   } catch (error) {
     console.error(chalk.red("Error in startSock:"), error);
   }
 }
 
 /**
- * Proses utama: periksa setting owner dan jalankan bot.
+ * Proses utama: periksa setting owner lalu jalankan bot.
  */
 async function main() {
   await checkOwner();
