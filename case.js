@@ -21,23 +21,29 @@ async function updateFile(sock, message, fileName, remoteUrl) {
   }
 }
 
-// Fungsi updatePlugins: mengambil daftar file plugin dari GitHub menggunakan API
-// dan menimpa seluruh file di folder plugins secara otomatis.
+// Fungsi updatePlugins: mengambil daftar file plugin dari GitHub menggunakan API,
+// dan menimpa file lokal dengan konten remote.
 async function updatePlugins(sock, message) {
   const pluginsPath = path.join(__dirname, 'plugins');
   if (!fs.existsSync(pluginsPath)) {
-    fs.mkdirSync(pluginsPath);
+    fs.mkdirSync(pluginsPath, { recursive: true });
   }
   try {
     const apiUrl = 'https://api.github.com/repos/Marshalyel/Mars/contents/plugins';
-    const response = await axios.get(apiUrl);
-    const files = response.data;
-    for (const fileObj of files) {
+    const response = await axios.get(apiUrl, {
+      headers: { 'Accept': 'application/vnd.github.v3+json' }
+    });
+    if (!response.data || !Array.isArray(response.data)) {
+      throw new Error('Format API tidak sesuai.');
+    }
+    for (const fileObj of response.data) {
       if (fileObj.type === 'file' && fileObj.name.endsWith('.js')) {
-        const remoteUrl = fileObj.download_url; // URL langsung ke file
+        const remoteUrl = fileObj.download_url;
+        console.log(`Memperbarui plugin: ${fileObj.name}`);
         await updateFile(sock, message, path.join('plugins', fileObj.name), remoteUrl);
       }
     }
+    await sock.sendMessage(message.key.remoteJid, { text: "Semua plugin telah diperbarui." });
   } catch (error) {
     console.error(chalk.red("Gagal memperbarui plugins:"), error);
     await sock.sendMessage(message.key.remoteJid, { text: "Gagal memperbarui plugins." });
@@ -50,10 +56,14 @@ const pluginsDir = path.join(__dirname, 'plugins');
 if (fs.existsSync(pluginsDir)) {
   fs.readdirSync(pluginsDir).forEach(file => {
     if (file.endsWith('.js')) {
-      const plugin = require(path.join(pluginsDir, file));
-      if (plugin.name && typeof plugin.run === 'function') {
-        plugins.set(plugin.name.toLowerCase(), plugin);
-        console.log(chalk.green(`Plugin loaded: ${plugin.name}`));
+      try {
+        const plugin = require(path.join(pluginsDir, file));
+        if (plugin.name && typeof plugin.run === 'function') {
+          plugins.set(plugin.name.toLowerCase(), plugin);
+          console.log(chalk.green(`Plugin loaded: ${plugin.name}`));
+        }
+      } catch (e) {
+        console.error(chalk.red(`Error loading plugin ${file}:`), e);
       }
     }
   });
@@ -83,7 +93,7 @@ async function handleCase(sock, message) {
   const chatId = message.key.remoteJid;
   let text = '';
 
-  // Ambil teks pesan dari beberapa kemungkinan properti
+  // Ambil teks pesan dari beberapa properti
   if (message.message.conversation) {
     text = message.message.conversation;
   } else if (message.message.extendedTextMessage) {
@@ -106,7 +116,6 @@ async function handleCase(sock, message) {
     console.log(chalk.gray("Pesan tidak menggunakan prefix yang diizinkan, diabaikan."));
     return;
   }
-
   const args = text.slice(usedPrefix.length).trim().split(/ +/);
   const command = args.shift().toLowerCase();
   console.log(chalk.cyan("Perintah yang terdeteksi:"), command);
@@ -183,7 +192,6 @@ async function handleCase(sock, message) {
       response = 'Halo! Apa kabar?';
       break;
     case 'menu': {
-      // Bangun menu dinamis dengan mendeteksi perintah built-in secara otomatis
       let sourceCode = fs.readFileSync(__filename, 'utf8');
       let builtInMatches = [];
       let regex = /case\s+'(\w+)'/g;
@@ -197,7 +205,6 @@ async function handleCase(sock, message) {
       builtInMatches.forEach((cmd, index) => {
         menuText += `${index + 1}. ${MULTI_PREFIX[0]}${cmd}\n`;
       });
-      // Tambahkan custom text commands
       const customTextKeys = Object.keys(customCommands.textCommands);
       if (customTextKeys.length > 0) {
         menuText += '\nCustom Text Commands:\n';
@@ -205,7 +212,6 @@ async function handleCase(sock, message) {
           menuText += `${i + 1}. ${MULTI_PREFIX[0]}${cmd}\n`;
         });
       }
-      // Tambahkan custom plugin commands
       const customPluginKeys = Object.keys(customCommands.pluginCommands);
       if (customPluginKeys.length > 0) {
         menuText += '\nCustom Plugin Commands:\n';
@@ -213,7 +219,6 @@ async function handleCase(sock, message) {
           menuText += `${i + 1}. ${MULTI_PREFIX[0]}${cmd}\n`;
         });
       }
-      // Tambahkan commands dari folder plugins
       if (plugins.size > 0) {
         menuText += '\nPlugin Commands:\n';
         let i = 1;
@@ -243,7 +248,6 @@ async function handleCase(sock, message) {
       process.exit(0);
       return;
     case 'update': {
-      // Fitur update: mendukung parameter "case", "index", dan "plugins"
       const remoteCaseUrl = 'https://raw.githubusercontent.com/Marshalyel/Mars/master/case.js';
       const remoteIndexUrl = 'https://raw.githubusercontent.com/Marshalyel/Mars/master/index.js';
       if (args.length > 0) {
