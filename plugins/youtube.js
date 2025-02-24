@@ -5,7 +5,7 @@ const { proto, prepareWAMessageMedia } = require('@whiskeysockets/baileys');
 
 module.exports = {
   name: 'youtube',
-  description: 'Melakukan pencarian video YouTube dan menampilkan hasil dalam bentuk carousel interaktif',
+  description: 'Melakukan pencarian video YouTube dan menampilkan hasil dalam bentuk carousel interaktif dengan tombol salin link',
   run: async (sock, message, args) => {
     const chatId = message.key.remoteJid;
     if (!args.length) {
@@ -19,23 +19,23 @@ module.exports = {
         return await sock.sendMessage(chatId, { text: 'Video tidak ditemukan!' });
       }
       
-      // Buat summary text untuk hasil pencarian
       let summaryText = `🔎 *Hasil Pencarian YouTube untuk:* _${query}_\n\n`;
-      
-      // Array untuk menyimpan card carousel
       let cards = [];
+
       for (const video of videos) {
         summaryText += `*🎬 ${video.title}*\n📅 ${video.ago} | ⏳ ${video.timestamp} | 👁 ${video.views}\n🔗 ${video.url}\n\n`;
         
         let mediaMessage = {};
         try {
-          // Menggunakan prepareWAMessageMedia untuk meng-upload thumbnail
-          mediaMessage = await prepareWAMessageMedia({ image: { url: video.thumbnail } }, { upload: sock.waUploadToServer });
+          // Pastikan fungsi upload dibinding ke konteks sock
+          mediaMessage = await prepareWAMessageMedia(
+            { image: { url: video.thumbnail } },
+            { upload: sock.waUploadToServer.bind(sock) }
+          );
         } catch (err) {
-          console.error('Error preparing media:', err);
+          console.error('Error preparing thumbnail:', err);
         }
         
-        // Buat card untuk setiap video
         cards.push({
           header: proto.Message.InteractiveMessage.Header.fromObject({
             title: video.title,
@@ -72,7 +72,6 @@ module.exports = {
         })
       });
       
-      // Bungkus pesan interaktif ke dalam viewOnceMessage dan kirimkan
       const msg = await sock.generateMessageFromContent(chatId, {
         viewOnceMessage: {
           message: {
