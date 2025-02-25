@@ -24,7 +24,7 @@ module.exports = {
       videos.forEach(video => {
         summaryText += `*🎬 ${video.title}*\n📅 ${video.ago} | ⏳ ${video.timestamp} | 👁 ${video.views}\n🔗 ${video.url}\n\n`;
       });
-      await sock.sendMessage(chatId, { text: summaryText });
+      await sock.sendMessage(chatId, { text: "*Loading* ⌛ \n > Wait for 5 seconds" });
       
       // Buat array card untuk carousel
       let cards = [];
