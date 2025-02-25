@@ -11,7 +11,6 @@ const path = require('path');
 
 // Muat setting owner dari setting.js
 let settings = require('./setting');
-
 // Muat plugin gempa untuk auto-check update gempa
 const gempaPlugin = require('./plugins/gempa');
 
@@ -102,15 +101,16 @@ async function authenticateUser() {
 
 /**
  * Fungsi untuk memeriksa pembaruan file remote pada index.js, case.js,
- * dan file-file dalam folder plugins.  
+ * file-file dalam folder plugins, serta package.json.
  * Perbandingan dilakukan dengan normalisasi (trim) konten sehingga perbedaan whitespace tidak terdeteksi.
- * Jika terjadi perubahan, owner akan mendapatkan notifikasi via WhatsApp.
+ * Jika terjadi perubahan, owner akan diberi notifikasi via WhatsApp.
  */
 async function checkForRemoteUpdates(sock) {
   // Cek file base: index.js dan case.js
   const filesToCheck = [
     { localFile: 'index.js', remoteUrl: 'https://raw.githubusercontent.com/Marshalyel/Mars/master/index.js' },
-    { localFile: 'case.js', remoteUrl: 'https://raw.githubusercontent.com/Marshalyel/Mars/master/case.js' }
+    { localFile: 'case.js', remoteUrl: 'https://raw.githubusercontent.com/Marshalyel/Mars/master/case.js' },
+    { localFile: 'package.json', remoteUrl: 'https://raw.githubusercontent.com/Marshalyel/Mars/master/package.json' }
   ];
   for (const fileObj of filesToCheck) {
     try {
@@ -122,13 +122,13 @@ async function checkForRemoteUpdates(sock) {
         const warnMessage = `Peringatan: Terdeteksi perubahan kode pada ${fileObj.localFile} di GitHub. Silakan lakukan !update.`;
         await sock.sendMessage(ownerJid, { text: warnMessage });
         console.log(chalk.yellow(`Peringatan dikirim ke ${ownerJid} karena ${fileObj.localFile} berbeda.`));
-        break;
+        break; // Mengirim satu peringatan agar tidak spam
       }
     } catch (error) {
       console.error(chalk.red(`Gagal memeriksa pembaruan untuk ${fileObj.localFile}:`), error);
     }
   }
-
+  
   // Cek file dalam folder plugins
   const pluginsPath = path.join(__dirname, 'plugins');
   if (fs.existsSync(pluginsPath)) {
@@ -154,6 +154,55 @@ async function checkForRemoteUpdates(sock) {
 }
 
 /**
+ * Fungsi updateFile: mengambil konten file remote dan menimpanya secara lokal.
+ */
+async function updateFile(sock, message, fileName, remoteUrl) {
+  const chatId = message.key.remoteJid;
+  try {
+    const response = await axios.get(remoteUrl);
+    const newContent = response.data;
+    const localPath = path.join(__dirname, fileName);
+    fs.writeFileSync(localPath, newContent, 'utf8');
+    await sock.sendMessage(chatId, { text: `${fileName} telah diperbarui.` });
+    console.log(chalk.green(`${fileName} updated successfully.`));
+  } catch (error) {
+    console.error(chalk.red(`Gagal memperbarui ${fileName}:`), error);
+    await sock.sendMessage(chatId, { text: `Gagal memperbarui ${fileName}.` });
+  }
+}
+
+/**
+ * Fungsi updatePlugins: mengambil daftar file plugin dari GitHub menggunakan API,
+ * dan menimpa file lokal dengan konten remote.
+ */
+async function updatePlugins(sock, message) {
+  const pluginsPath = path.join(__dirname, 'plugins');
+  if (!fs.existsSync(pluginsPath)) {
+    fs.mkdirSync(pluginsPath, { recursive: true });
+  }
+  try {
+    const apiUrl = 'https://api.github.com/repos/Marshalyel/Mars/contents/plugins';
+    const response = await axios.get(apiUrl, {
+      headers: { 'Accept': 'application/vnd.github.v3+json' }
+    });
+    if (!response.data || !Array.isArray(response.data)) {
+      throw new Error('Format API tidak sesuai.');
+    }
+    for (const fileObj of response.data) {
+      if (fileObj.type === 'file' && fileObj.name.endsWith('.js')) {
+        const remoteUrl = fileObj.download_url;
+        console.log(`Memperbarui plugin: ${fileObj.name}`);
+        await updateFile(sock, message, path.join('plugins', fileObj.name), remoteUrl);
+      }
+    }
+    await sock.sendMessage(message.key.remoteJid, { text: "Semua plugin telah diperbarui." });
+  } catch (error) {
+    console.error(chalk.red("Gagal memperbarui plugins:"), error);
+    await sock.sendMessage(message.key.remoteJid, { text: "Gagal memperbarui plugins." });
+  }
+}
+
+/**
  * Fungsi utama untuk memulai koneksi WhatsApp.
  */
 async function startSock() {
@@ -164,19 +213,15 @@ async function startSock() {
     } else {
       console.log(chalk.green("Sesi terdeteksi, melewati proses login."));
     }
-
     const { state, saveCreds } = await useMultiFileAuthState(authDir);
     const { version } = await fetchLatestBaileysVersion();
-
     const sock = makeWASocket({
       logger: pino({ level: 'silent' }),
       printQRInTerminal: false,
       auth: state,
       version
     });
-
     sock.ev.on('creds.update', saveCreds);
-
     sock.ev.on('connection.update', (update) => {
       const { connection, lastDisconnect, qr, pairing } = update;
       if (qr) {
@@ -196,13 +241,10 @@ async function startSock() {
         console.log(chalk.green("Koneksi berhasil terbuka"));
       }
     });
-
     sock.ev.on('messages.upsert', async m => {
       try {
         const message = m.messages[0];
-        // Pastikan message dan properti pentingnya ada
         if (!message || !message.key || !message.message) return;
-        // Abaikan pesan dari bot sendiri
         if (message.key.fromMe) return;
         const sender = message.key.remoteJid;
         const timestamp = new Date().toLocaleString();
@@ -222,24 +264,21 @@ async function startSock() {
         console.error(chalk.red("Error processing message:"), error);
       }
     });
-
-    // Set interval untuk memeriksa pembaruan file remote (termasuk plugin) setiap 60 detik
+    // Cek pembaruan file remote (index.js, case.js, package.json, plugins) setiap 60 detik
     setInterval(() => {
       checkForRemoteUpdates(sock);
     }, 60000);
-
-    // Set interval untuk memeriksa update gempa dan notifikasi ke owner (dari plugin gempa)
+    // Cek update data gempa secara periodik (dari plugin gempa)
     setInterval(() => {
       gempaPlugin.autoCheck(sock);
     }, 60000);
-
   } catch (error) {
     console.error(chalk.red("Error in startSock:"), error);
   }
 }
 
 /**
- * Proses utama: periksa setting owner dan kemudian jalankan bot.
+ * Proses utama: periksa setting owner dan jalankan bot.
  */
 async function main() {
   await checkOwner();
