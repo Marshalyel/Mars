@@ -30,7 +30,6 @@ function askQuestion(query) {
 
 /**
  * Fungsi untuk mengupdate file setting.js dengan owner baru.
- * Owner akan disimpan dalam format: '628xxxxxxxxxx@s.whatsapp.net'
  */
 function updateOwnerSetting(newOwner) {
   const content = `module.exports = {\n  owner: '${newOwner.trim()}'\n};\n`;
@@ -42,7 +41,6 @@ function updateOwnerSetting(newOwner) {
 
 /**
  * Fungsi untuk memeriksa apakah owner sudah terdefinisi.
- * Jika tidak, meminta input nomor owner melalui console.
  */
 async function checkOwner() {
   if (!settings.owner || settings.owner.trim() === '') {
@@ -100,13 +98,11 @@ async function authenticateUser() {
 }
 
 /**
- * Fungsi untuk memeriksa pembaruan file remote pada index.js, case.js,
- * file-file dalam folder plugins, serta package.json.
- * Perbandingan dilakukan dengan normalisasi (trim) konten sehingga perbedaan whitespace tidak terdeteksi.
- * Jika terjadi perubahan, owner akan diberi notifikasi via WhatsApp.
+ * Fungsi untuk memeriksa pembaruan file remote pada index.js, case.js, package.json,
+ * dan file-file dalam folder plugins.
  */
 async function checkForRemoteUpdates(sock) {
-  // Cek file base: index.js dan case.js
+  // Cek file base: index.js, case.js, package.json
   const filesToCheck = [
     { localFile: 'index.js', remoteUrl: 'https://raw.githubusercontent.com/Marshalyel/Mars/master/index.js' },
     { localFile: 'case.js', remoteUrl: 'https://raw.githubusercontent.com/Marshalyel/Mars/master/case.js' },
@@ -115,20 +111,25 @@ async function checkForRemoteUpdates(sock) {
   for (const fileObj of filesToCheck) {
     try {
       const remoteResponse = await axios.get(fileObj.remoteUrl);
-      let remoteContent = remoteResponse.data.trim();
+      let remoteContent = remoteResponse.data;
+      if (typeof remoteContent !== 'string') {
+        remoteContent = JSON.stringify(remoteContent, null, 2);
+      } else {
+        remoteContent = remoteContent.trim();
+      }
       let localContent = fs.readFileSync(fileObj.localFile, 'utf8').trim();
       if (localContent !== remoteContent) {
         const ownerJid = settings.owner;
         const warnMessage = `Peringatan: Terdeteksi perubahan kode pada ${fileObj.localFile} di GitHub. Silakan lakukan !update.`;
         await sock.sendMessage(ownerJid, { text: warnMessage });
         console.log(chalk.yellow(`Peringatan dikirim ke ${ownerJid} karena ${fileObj.localFile} berbeda.`));
-        break; // Mengirim satu peringatan agar tidak spam
+        break;
       }
     } catch (error) {
       console.error(chalk.red(`Gagal memeriksa pembaruan untuk ${fileObj.localFile}:`), error);
     }
   }
-  
+
   // Cek file dalam folder plugins
   const pluginsPath = path.join(__dirname, 'plugins');
   if (fs.existsSync(pluginsPath)) {
@@ -137,7 +138,12 @@ async function checkForRemoteUpdates(sock) {
       try {
         const remoteUrl = 'https://raw.githubusercontent.com/Marshalyel/Mars/master/plugins/' + file;
         const remoteResponse = await axios.get(remoteUrl);
-        let remoteContent = remoteResponse.data.trim();
+        let remoteContent = remoteResponse.data;
+        if (typeof remoteContent !== 'string') {
+          remoteContent = JSON.stringify(remoteContent, null, 2);
+        } else {
+          remoteContent = remoteContent.trim();
+        }
         let localContent = fs.readFileSync(path.join(pluginsPath, file), 'utf8').trim();
         if (localContent !== remoteContent) {
           const ownerJid = settings.owner;
