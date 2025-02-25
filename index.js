@@ -1,5 +1,4 @@
 // index.js
-//Mars
 
 const axios = require('axios');
 const { default: makeWASocket, useMultiFileAuthState, fetchLatestBaileysVersion, DisconnectReason } = require('@whiskeysockets/baileys');
@@ -10,8 +9,11 @@ const readline = require('readline');
 const fs = require('fs');
 const path = require('path');
 
-// Load konfigurasi owner dari setting.js
+// Muat setting owner dari setting.js
 let settings = require('./setting');
+
+// Muat plugin gempa untuk auto-check update gempa
+const gempaPlugin = require('./plugins/gempa');
 
 /**
  * Fungsi untuk meminta input dari terminal.
@@ -29,7 +31,7 @@ function askQuestion(query) {
 
 /**
  * Fungsi untuk mengupdate file setting.js dengan owner baru.
- * Owner akan ditulis dalam format: '628xxxxxxxxxx@s.whatsapp.net'
+ * Owner akan disimpan dalam format: '628xxxxxxxxxx@s.whatsapp.net'
  */
 function updateOwnerSetting(newOwner) {
   const content = `module.exports = {\n  owner: '${newOwner.trim()}'\n};\n`;
@@ -41,7 +43,7 @@ function updateOwnerSetting(newOwner) {
 
 /**
  * Fungsi untuk memeriksa apakah owner sudah terdefinisi.
- * Jika tidak, akan meminta input nomor owner melalui console.
+ * Jika tidak, meminta input nomor owner melalui console.
  */
 async function checkOwner() {
   if (!settings.owner || settings.owner.trim() === '') {
@@ -99,13 +101,13 @@ async function authenticateUser() {
 }
 
 /**
- * Fungsi untuk memeriksa pembaruan file remote pada index.js, case.js, 
- * dan file-file dalam folder plugins.
- * Normalisasi konten (trim) digunakan untuk mengabaikan perbedaan whitespace.
- * Jika ada perbedaan, owner akan diberitahu via pesan WhatsApp.
+ * Fungsi untuk memeriksa pembaruan file remote pada index.js, case.js,
+ * dan file-file dalam folder plugins.  
+ * Perbandingan dilakukan dengan normalisasi (trim) konten sehingga perbedaan whitespace tidak terdeteksi.
+ * Jika terjadi perubahan, owner akan mendapatkan notifikasi via WhatsApp.
  */
 async function checkForRemoteUpdates(sock) {
-  // Periksa file base: index.js dan case.js
+  // Cek file base: index.js dan case.js
   const filesToCheck = [
     { localFile: 'index.js', remoteUrl: 'https://raw.githubusercontent.com/Marshalyel/Mars/master/index.js' },
     { localFile: 'case.js', remoteUrl: 'https://raw.githubusercontent.com/Marshalyel/Mars/master/case.js' }
@@ -120,14 +122,14 @@ async function checkForRemoteUpdates(sock) {
         const warnMessage = `Peringatan: Terdeteksi perubahan kode pada ${fileObj.localFile} di GitHub. Silakan lakukan !update.`;
         await sock.sendMessage(ownerJid, { text: warnMessage });
         console.log(chalk.yellow(`Peringatan dikirim ke ${ownerJid} karena ${fileObj.localFile} berbeda.`));
-        break; // Mengirim satu peringatan untuk menghindari spam
+        break;
       }
     } catch (error) {
       console.error(chalk.red(`Gagal memeriksa pembaruan untuk ${fileObj.localFile}:`), error);
     }
   }
 
-  // Periksa file pada folder plugins
+  // Cek file dalam folder plugins
   const pluginsPath = path.join(__dirname, 'plugins');
   if (fs.existsSync(pluginsPath)) {
     const pluginFiles = fs.readdirSync(pluginsPath).filter(file => file.endsWith('.js'));
@@ -162,15 +164,19 @@ async function startSock() {
     } else {
       console.log(chalk.green("Sesi terdeteksi, melewati proses login."));
     }
+
     const { state, saveCreds } = await useMultiFileAuthState(authDir);
     const { version } = await fetchLatestBaileysVersion();
+
     const sock = makeWASocket({
       logger: pino({ level: 'silent' }),
       printQRInTerminal: false,
       auth: state,
       version
     });
+
     sock.ev.on('creds.update', saveCreds);
+
     sock.ev.on('connection.update', (update) => {
       const { connection, lastDisconnect, qr, pairing } = update;
       if (qr) {
@@ -190,14 +196,12 @@ async function startSock() {
         console.log(chalk.green("Koneksi berhasil terbuka"));
       }
     });
+
     sock.ev.on('messages.upsert', async m => {
       try {
         const message = m.messages[0];
-        // Pastikan properti penting ada sebelum melanjutkan
-        if (!message || !message.key || !message.message) {
-          console.log(chalk.gray("Pesan tidak lengkap, dilewati."));
-          return;
-        }
+        // Pastikan message dan properti pentingnya ada
+        if (!message || !message.key || !message.message) return;
         // Abaikan pesan dari bot sendiri
         if (message.key.fromMe) return;
         const sender = message.key.remoteJid;
@@ -218,16 +222,24 @@ async function startSock() {
         console.error(chalk.red("Error processing message:"), error);
       }
     });
+
+    // Set interval untuk memeriksa pembaruan file remote (termasuk plugin) setiap 60 detik
     setInterval(() => {
       checkForRemoteUpdates(sock);
     }, 60000);
+
+    // Set interval untuk memeriksa update gempa dan notifikasi ke owner (dari plugin gempa)
+    setInterval(() => {
+      gempaPlugin.autoCheck(sock);
+    }, 60000);
+
   } catch (error) {
     console.error(chalk.red("Error in startSock:"), error);
   }
 }
 
 /**
- * Proses utama: periksa setting owner lalu jalankan bot.
+ * Proses utama: periksa setting owner dan kemudian jalankan bot.
  */
 async function main() {
   await checkOwner();
