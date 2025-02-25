@@ -100,6 +100,8 @@ async function authenticateUser() {
 /**
  * Fungsi untuk memeriksa pembaruan file remote pada index.js, case.js, package.json,
  * dan file-file dalam folder plugins.
+ * Normalisasi konten (trim) digunakan agar perbedaan whitespace tidak terdeteksi.
+ * Jika terjadi perubahan, owner akan diberi notifikasi via WhatsApp.
  */
 async function checkForRemoteUpdates(sock) {
   // Cek file base: index.js, case.js, package.json
@@ -123,7 +125,7 @@ async function checkForRemoteUpdates(sock) {
         const warnMessage = `Peringatan: Terdeteksi perubahan kode pada ${fileObj.localFile} di GitHub. Silakan lakukan !update.`;
         await sock.sendMessage(ownerJid, { text: warnMessage });
         console.log(chalk.yellow(`Peringatan dikirim ke ${ownerJid} karena ${fileObj.localFile} berbeda.`));
-        break;
+        break; // Mengirim satu peringatan untuk menghindari spam
       }
     } catch (error) {
       console.error(chalk.red(`Gagal memeriksa pembaruan untuk ${fileObj.localFile}:`), error);
@@ -161,12 +163,16 @@ async function checkForRemoteUpdates(sock) {
 
 /**
  * Fungsi updateFile: mengambil konten file remote dan menimpanya secara lokal.
+ * Jika data bukan string, maka akan diubah menjadi string.
  */
 async function updateFile(sock, message, fileName, remoteUrl) {
   const chatId = message.key.remoteJid;
   try {
     const response = await axios.get(remoteUrl);
-    const newContent = response.data;
+    let newContent = response.data;
+    if (typeof newContent !== 'string') {
+      newContent = JSON.stringify(newContent, null, 2);
+    }
     const localPath = path.join(__dirname, fileName);
     fs.writeFileSync(localPath, newContent, 'utf8');
     await sock.sendMessage(chatId, { text: `${fileName} telah diperbarui.` });
