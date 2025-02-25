@@ -100,8 +100,6 @@ async function authenticateUser() {
 /**
  * Fungsi untuk memeriksa pembaruan file remote pada index.js, case.js, package.json,
  * dan file-file dalam folder plugins.
- * Normalisasi konten (trim) digunakan agar perbedaan whitespace tidak terdeteksi.
- * Jika terjadi perubahan, owner akan diberi notifikasi via WhatsApp.
  */
 async function checkForRemoteUpdates(sock) {
   // Cek file base: index.js, case.js, package.json
@@ -114,7 +112,8 @@ async function checkForRemoteUpdates(sock) {
     try {
       const remoteResponse = await axios.get(fileObj.remoteUrl);
       let remoteContent = remoteResponse.data;
-      if (typeof remoteContent !== 'string') {
+      // Jika file adalah package.json atau data bukan string, stringify data tersebut
+      if (fileObj.localFile === 'package.json' || typeof remoteContent !== 'string') {
         remoteContent = JSON.stringify(remoteContent, null, 2);
       } else {
         remoteContent = remoteContent.trim();
@@ -163,15 +162,16 @@ async function checkForRemoteUpdates(sock) {
 
 /**
  * Fungsi updateFile: mengambil konten file remote dan menimpanya secara lokal.
- * Jika data bukan string, maka akan diubah menjadi string.
  */
 async function updateFile(sock, message, fileName, remoteUrl) {
   const chatId = message.key.remoteJid;
   try {
     const response = await axios.get(remoteUrl);
     let newContent = response.data;
-    if (typeof newContent !== 'string') {
+    if (fileName === 'package.json' || typeof newContent !== 'string') {
       newContent = JSON.stringify(newContent, null, 2);
+    } else {
+      newContent = newContent.trim();
     }
     const localPath = path.join(__dirname, fileName);
     fs.writeFileSync(localPath, newContent, 'utf8');
