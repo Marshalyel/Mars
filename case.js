@@ -1,9 +1,10 @@
 // case.js
-//Mars
-const chalk = require('chalk');
+
 const axios = require('axios');
+const chalk = require('chalk');
 const fs = require('fs');
 const path = require('path');
+const { proto, generateWAMessageFromContent, prepareWAMessageMedia } = require('@whiskeysockets/baileys');
 
 // Fungsi updateFile: mengambil konten remote dan menimpanya secara lokal.
 async function updateFile(sock, message, fileName, remoteUrl) {
@@ -50,25 +51,6 @@ async function updatePlugins(sock, message) {
   }
 }
 
-// Load plugin dari folder plugins
-const plugins = new Map();
-const pluginsDir = path.join(__dirname, 'plugins');
-if (fs.existsSync(pluginsDir)) {
-  fs.readdirSync(pluginsDir).forEach(file => {
-    if (file.endsWith('.js')) {
-      try {
-        const plugin = require(path.join(pluginsDir, file));
-        if (plugin.name && typeof plugin.run === 'function') {
-          plugins.set(plugin.name.toLowerCase(), plugin);
-          console.log(chalk.green(`Plugin loaded: ${plugin.name}`));
-        }
-      } catch (e) {
-        console.error(chalk.red(`Error loading plugin ${file}:`), e);
-      }
-    }
-  });
-}
-
 // Definisikan array prefix yang diizinkan (misalnya: "!", ".", "/")
 const MULTI_PREFIX = ['!', '.', '/'];
 
@@ -83,6 +65,25 @@ if (fs.existsSync(customCommandsFile)) {
   }
 }
 
+// Load plugin (jika ada) dari folder plugins
+const plugins = new Map();
+const pluginsDir = path.join(__dirname, 'plugins');
+if (fs.existsSync(pluginsDir)) {
+  fs.readdirSync(pluginsDir).forEach(file => {
+    if (file.endsWith('.js')) {
+      try {
+        const plugin = require(path.join(pluginsDir, file));
+        if (plugin && plugin.name && typeof plugin.run === 'function') {
+          plugins.set(plugin.name.toLowerCase(), plugin);
+          console.log(chalk.green(`Plugin loaded: ${plugin.name}`));
+        }
+      } catch (e) {
+        console.error(chalk.red(`Error loading plugin ${file}:`), e);
+      }
+    }
+  });
+}
+
 /**
  * Fungsi untuk menangani perintah pesan.
  *
@@ -93,7 +94,7 @@ async function handleCase(sock, message) {
   const chatId = message.key.remoteJid;
   let text = '';
 
-  // Ambil teks pesan dari beberapa properti
+  // Ambil teks pesan dari beberapa kemungkinan properti
   if (message.message.conversation) {
     text = message.message.conversation;
   } else if (message.message.extendedTextMessage) {
@@ -121,7 +122,7 @@ async function handleCase(sock, message) {
   console.log(chalk.cyan("Perintah yang terdeteksi:"), command);
   if (args.length > 0) console.log(chalk.cyan("Argumen:"), args);
 
-  // Tambah custom text command: !addcase nama | teks_balasan
+  // Penambahan perintah custom: !addcase dan !addplugin
   if (command === 'addcase') {
     const rest = args.join(" ");
     const parts = rest.split(" | ");
@@ -138,7 +139,6 @@ async function handleCase(sock, message) {
     return sock.sendMessage(chatId, { text: `Command "${name}" berhasil ditambahkan.` });
   }
 
-  // Tambah custom plugin command: !addplugin nama | kode_javascript
   if (command === 'addplugin') {
     const rest = args.join(" ");
     const parts = rest.split(" | ");
@@ -192,6 +192,7 @@ async function handleCase(sock, message) {
       response = 'Halo! Apa kabar?';
       break;
     case 'menu': {
+      // Bangun menu dinamis dengan mendeteksi perintah built-in secara otomatis
       let sourceCode = fs.readFileSync(__filename, 'utf8');
       let builtInMatches = [];
       let regex = /case\s+'(\w+)'/g;
@@ -205,6 +206,7 @@ async function handleCase(sock, message) {
       builtInMatches.forEach((cmd, index) => {
         menuText += `${index + 1}. ${MULTI_PREFIX[0]}${cmd}\n`;
       });
+      // Tambahkan custom commands
       const customTextKeys = Object.keys(customCommands.textCommands);
       if (customTextKeys.length > 0) {
         menuText += '\nCustom Text Commands:\n';
@@ -248,21 +250,28 @@ async function handleCase(sock, message) {
       process.exit(0);
       return;
     case 'update': {
+      // Fitur update: mendukung parameter "case", "index", "plugins", dan "package"
       const remoteCaseUrl = 'https://raw.githubusercontent.com/Marshalyel/Mars/master/case.js';
       const remoteIndexUrl = 'https://raw.githubusercontent.com/Marshalyel/Mars/master/index.js';
+      const remotePackageUrl = 'https://raw.githubusercontent.com/Marshalyel/Mars/master/package.json';
       if (args.length > 0) {
-        if (args[0].toLowerCase() === 'case') {
+        const param = args[0].toLowerCase();
+        if (param === 'case') {
           await updateFile(sock, message, 'case.js', remoteCaseUrl);
-        } else if (args[0].toLowerCase() === 'index') {
+        } else if (param === 'index') {
           await updateFile(sock, message, 'index.js', remoteIndexUrl);
-        } else if (args[0].toLowerCase() === 'plugins') {
+        } else if (param === 'plugins') {
           await updatePlugins(sock, message);
+        } else if (param === 'package') {
+          await updateFile(sock, message, 'package.json', remotePackageUrl);
         } else {
-          response = 'Parameter update tidak dikenali. Gunakan "case", "index", atau "plugins".';
+          response = 'Parameter update tidak dikenali. Gunakan "case", "index", "plugins", atau "package".';
         }
       } else {
+        // Jika tidak ada parameter, update semua
         await updateFile(sock, message, 'case.js', remoteCaseUrl);
         await updateFile(sock, message, 'index.js', remoteIndexUrl);
+        await updateFile(sock, message, 'package.json', remotePackageUrl);
         await updatePlugins(sock, message);
       }
       return;
