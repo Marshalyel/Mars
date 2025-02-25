@@ -49,6 +49,13 @@ module.exports = {
           }),
           nativeFlowMessage: proto.Message.InteractiveMessage.NativeFlowMessage.fromObject({
             buttons: [
+            {
+              name: "cta_copy",
+              buttonParamsJson: JSON.stringify({
+                display_text: "Salin Link",
+                copy_text: video.url
+              })
+            },
               {
                 name: "cta_mp3",
                 buttonParamsJson: JSON.stringify({
