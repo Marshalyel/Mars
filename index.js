@@ -12,7 +12,7 @@ const path = require('path');
 // Muat setting owner dari file setting.js
 let settings = require('./setting');
 
-// Muat plugin gempa dan azan (pastikan plugin ini ada di folder plugins)
+// Muat plugin gempa dan azan (jika tersedia)
 const gempaPlugin = require('./plugins/gempa');
 let azanPlugin;
 try {
@@ -21,21 +21,15 @@ try {
   console.error(chalk.red("Plugin azan tidak ditemukan atau error:"), e);
 }
 
-// Global flag selfMode (default off)
+// Global flag untuk self mode (default: off)
 let selfMode = false;
 
 /**
  * Fungsi untuk meminta input dari terminal.
  */
 function askQuestion(query) {
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout,
-  });
-  return new Promise(resolve => rl.question(query, ans => {
-    rl.close();
-    resolve(ans);
-  }));
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  return new Promise(resolve => rl.question(query, ans => { rl.close(); resolve(ans); }));
 }
 
 /**
@@ -83,7 +77,8 @@ async function fetchConfig() {
 }
 
 /**
- * Fungsi autentikasi: mengambil array user, meminta username & password, lalu mencocokkan kredensial.
+ * Fungsi autentikasi: mengambil array user, meminta username & password,
+ * dan mencocokkan kredensial.
  */
 async function authenticateUser() {
   const configData = await fetchConfig();
@@ -107,7 +102,8 @@ async function authenticateUser() {
 }
 
 /**
- * Fungsi untuk memeriksa pembaruan file remote (index.js, case.js, package.json, plugins).
+ * Fungsi untuk memeriksa pembaruan file remote pada file base (index.js, case.js, package.json)
+ * dan file-file di folder plugins. Data remote yang bukan string akan di-stringify.
  */
 async function checkForRemoteUpdates(sock) {
   const filesToCheck = [
@@ -136,8 +132,8 @@ async function checkForRemoteUpdates(sock) {
       console.error(chalk.red(`Gagal memeriksa pembaruan untuk ${fileObj.localFile}:`), error);
     }
   }
-
-  // Periksa file di folder plugins
+  
+  // Cek file di folder plugins
   const pluginsPath = path.join(__dirname, 'plugins');
   if (fs.existsSync(pluginsPath)) {
     const pluginFiles = fs.readdirSync(pluginsPath).filter(file => file.endsWith('.js'));
@@ -167,7 +163,7 @@ async function checkForRemoteUpdates(sock) {
 }
 
 /**
- * Fungsi updateFile: mengambil konten file remote dan menimpanya secara lokal.
+ * Fungsi updateFile: mengambil konten remote dan menimpa file lokal.
  */
 async function updateFile(sock, message, fileName, remoteUrl) {
   const chatId = message.key.remoteJid;
@@ -191,7 +187,7 @@ async function updateFile(sock, message, fileName, remoteUrl) {
 
 /**
  * Fungsi updatePlugins: mengambil daftar file plugin dari GitHub menggunakan API,
- * dan menimpanya ke folder plugins.
+ * dan menimpa file lokal di folder plugins.
  */
 async function updatePlugins(sock, message) {
   const pluginsPath = path.join(__dirname, 'plugins');
@@ -219,11 +215,6 @@ async function updatePlugins(sock, message) {
     await sock.sendMessage(message.key.remoteJid, { text: "Gagal memperbarui plugins." });
   }
 }
-
-/**
- * Global flag untuk self mode (default: off)
- */
-let selfMode = false;
 
 /**
  * Fungsi utama untuk memulai koneksi WhatsApp.
@@ -268,12 +259,9 @@ async function startSock() {
       try {
         const message = m.messages[0];
         if (!message || !message.key || !message.message) return;
-        // Jika pesan berasal dari bot sendiri, selalu proses
-        // Jika selfMode aktif, hanya proses pesan yang berasal dari bot
+        // Proses perintah !self on/off
         const sender = message.key.remoteJid;
         const text = (message.message.conversation || message.message.extendedTextMessage?.text || "").trim();
-        
-        // Jika perintah !self on/off, proses selalu
         if (text.startsWith("!self")) {
           const parts = text.split(" ");
           if (parts[1] && parts[1].toLowerCase() === "on") {
@@ -310,7 +298,7 @@ async function startSock() {
     setInterval(() => {
       gempaPlugin.autoCheck(sock);
     }, 60000);
-    // Jika plugin azan tersedia, cek update jadwal azan secara periodik
+    // Cek update jadwal azan secara periodik (jika plugin azan tersedia)
     if (azanPlugin && typeof azanPlugin.autoRun === 'function') {
       setInterval(() => {
         azanPlugin.autoRun(sock);
