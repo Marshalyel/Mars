@@ -11,7 +11,12 @@ async function updateFile(sock, message, fileName, remoteUrl) {
   const chatId = message.key.remoteJid;
   try {
     const response = await axios.get(remoteUrl);
-    const newContent = response.data;
+    let newContent = response.data;
+    if (fileName === 'package.json' || typeof newContent !== 'string') {
+      newContent = JSON.stringify(newContent, null, 2);
+    } else {
+      newContent = newContent.trim();
+    }
     const localPath = path.join(__dirname, fileName);
     fs.writeFileSync(localPath, newContent, 'utf8');
     await sock.sendMessage(chatId, { text: `${fileName} telah diperbarui.` });
@@ -23,7 +28,7 @@ async function updateFile(sock, message, fileName, remoteUrl) {
 }
 
 // Fungsi updatePlugins: mengambil daftar file plugin dari GitHub menggunakan API,
-// dan menimpa file lokal dengan konten remote.
+// dan menimpa file lokal di folder plugins.
 async function updatePlugins(sock, message) {
   const pluginsPath = path.join(__dirname, 'plugins');
   if (!fs.existsSync(pluginsPath)) {
@@ -60,12 +65,16 @@ let customCommands = { textCommands: {}, pluginCommands: {} };
 if (fs.existsSync(customCommandsFile)) {
   try {
     customCommands = JSON.parse(fs.readFileSync(customCommandsFile, 'utf8'));
+    // Pastikan properti textCommands dan pluginCommands selalu ada
+    if (!customCommands.textCommands) customCommands.textCommands = {};
+    if (!customCommands.pluginCommands) customCommands.pluginCommands = {};
   } catch (err) {
     console.error(chalk.red("Error loading custom commands:"), err);
+    customCommands = { textCommands: {}, pluginCommands: {} };
   }
 }
 
-// Load plugin (jika ada) dari folder plugins
+// Load plugin dari folder plugins
 const plugins = new Map();
 const pluginsDir = path.join(__dirname, 'plugins');
 if (fs.existsSync(pluginsDir)) {
@@ -94,7 +103,6 @@ async function handleCase(sock, message) {
   const chatId = message.key.remoteJid;
   let text = '';
 
-  // Ambil teks pesan dari beberapa kemungkinan properti
   if (message.message.conversation) {
     text = message.message.conversation;
   } else if (message.message.extendedTextMessage) {
@@ -122,7 +130,7 @@ async function handleCase(sock, message) {
   console.log(chalk.cyan("Perintah yang terdeteksi:"), command);
   if (args.length > 0) console.log(chalk.cyan("Argumen:"), args);
 
-  // Penambahan perintah custom: !addcase dan !addplugin
+  // Perintah penambahan custom text command
   if (command === 'addcase') {
     const rest = args.join(" ");
     const parts = rest.split(" | ");
@@ -139,6 +147,7 @@ async function handleCase(sock, message) {
     return sock.sendMessage(chatId, { text: `Command "${name}" berhasil ditambahkan.` });
   }
 
+  // Perintah penambahan custom plugin command
   if (command === 'addplugin') {
     const rest = args.join(" ");
     const parts = rest.split(" | ");
@@ -206,7 +215,6 @@ async function handleCase(sock, message) {
       builtInMatches.forEach((cmd, index) => {
         menuText += `${index + 1}. ${MULTI_PREFIX[0]}${cmd}\n`;
       });
-      // Tambahkan custom commands
       const customTextKeys = Object.keys(customCommands.textCommands);
       if (customTextKeys.length > 0) {
         menuText += '\nCustom Text Commands:\n';
@@ -268,7 +276,6 @@ async function handleCase(sock, message) {
           response = 'Parameter update tidak dikenali. Gunakan "case", "index", "plugins", atau "package".';
         }
       } else {
-        // Jika tidak ada parameter, update semua
         await updateFile(sock, message, 'case.js', remoteCaseUrl);
         await updateFile(sock, message, 'index.js', remoteIndexUrl);
         await updateFile(sock, message, 'package.json', remotePackageUrl);
