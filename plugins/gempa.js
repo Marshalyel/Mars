@@ -4,7 +4,7 @@ const axios = require('axios');
 
 let lastGempaDateTime = null; // Menyimpan waktu gempa terakhir
 
-// Fungsi pembantu untuk memeriksa update data gempa dan mengirim notifikasi ke owner
+// Fungsi pembantu: cek data gempa dan notifikasi ke owner jika ada update
 async function checkGempaAndNotify(sock, ownerJid) {
   try {
     const response = await axios.get('https://data.bmkg.go.id/DataMKG/TEWS/autogempa.json');
@@ -16,19 +16,19 @@ async function checkGempaAndNotify(sock, ownerJid) {
     let gempa = data.Infogempa.gempa;
     if (Array.isArray(gempa)) gempa = gempa[0];
 
-    // Gunakan properti DateTime jika ada, atau gabungkan Tanggal dan Jam
+    // Gunakan properti DateTime jika ada, atau gabungan Tanggal dan Jam
     const currentDateTime = gempa.DateTime || `${gempa.Tanggal || ''} ${gempa.Jam || ''}`.trim();
 
-    // Jika belum pernah disimpan, simpan nilai sekarang dan keluar
+    // Jika belum pernah disimpan, simpan data sekarang
     if (!lastGempaDateTime) {
       lastGempaDateTime = currentDateTime;
       console.log("Data gempa awal disimpan:", lastGempaDateTime);
       return;
     }
 
-    // Jika waktu gempa baru berbeda, maka terjadi update
+    // Jika data baru berbeda dari data terakhir, kirim notifikasi ke owner
     if (currentDateTime !== lastGempaDateTime) {
-      lastGempaDateTime = currentDateTime;
+      lastGempaDateTime = currentDateTime; // Perbarui nilai terakhir
       const infoText = `*Update Gempa Terbaru BMKG:*\n` +
                          `Tanggal    : ${gempa.Tanggal || 'N/A'}\n` +
                          `Jam        : ${gempa.Jam || 'N/A'}\n` +
@@ -39,9 +39,14 @@ async function checkGempaAndNotify(sock, ownerJid) {
                          `Bujur      : ${gempa.Bujur || 'N/A'}\n` +
                          `Wilayah    : ${gempa.Wilayah || 'N/A'}\n` +
                          `Potensi    : ${gempa.Potensi || 'N/A'}`;
+      // Jika properti Shakemap tersedia, pastikan URL lengkap
       if (gempa.Shakemap) {
-        // Jika terdapat URL peta, kirim sebagai gambar dengan caption
-        await sock.sendMessage(ownerJid, { image: { url: gempa.Shakemap }, caption: infoText });
+        let shakemapUrl = gempa.Shakemap;
+        if (!shakemapUrl.startsWith('http')) {
+          // Misalnya, jika hanya nama file, tambahkan base URL
+          shakemapUrl = 'https://data.bmkg.go.id/DataMKG/TEWS/' + shakemapUrl;
+        }
+        await sock.sendMessage(ownerJid, { image: { url: shakemapUrl }, caption: infoText });
       } else {
         await sock.sendMessage(ownerJid, { text: infoText });
       }
@@ -56,9 +61,9 @@ async function checkGempaAndNotify(sock, ownerJid) {
 
 module.exports = {
   name: 'gempa',
-  description: 'Menampilkan data gempa terbaru BMKG dan mengirim notifikasi update (dengan peta) ke owner jika ada update.',
+  description: 'Menampilkan data gempa terbaru BMKG beserta peta jika tersedia dan mengirim notifikasi update ke owner.',
   
-  // Fungsi run() untuk dipanggil jika perintah !gempa dipanggil secara manual
+  // Fungsi run() untuk perintah manual !gempa
   run: async (sock, message, args) => {
     const chatId = message.key.remoteJid;
     try {
@@ -92,7 +97,11 @@ module.exports = {
                       `Potensi    : ${potensi}`;
       
       if (gempa.Shakemap) {
-        await sock.sendMessage(chatId, { image: { url: gempa.Shakemap }, caption: textMsg });
+        let shakemapUrl = gempa.Shakemap;
+        if (!shakemapUrl.startsWith('http')) {
+          shakemapUrl = 'https://data.bmkg.go.id/DataMKG/TEWS/' + shakemapUrl;
+        }
+        await sock.sendMessage(chatId, { image: { url: shakemapUrl }, caption: textMsg });
       } else {
         await sock.sendMessage(chatId, { text: textMsg });
       }
@@ -102,7 +111,7 @@ module.exports = {
     }
   },
   
-  // Fungsi autoCheck() yang dapat dipanggil secara periodik (misalnya, dari index.js)
+  // Fungsi autoCheck() untuk dipanggil secara periodik (misalnya dari index.js)
   autoCheck: async (sock) => {
     const ownerJid = require('../setting').owner;
     if (!ownerJid) return;
