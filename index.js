@@ -9,10 +9,12 @@ const readline = require('readline');
 const fs = require('fs');
 const path = require('path');
 
-// Muat setting owner dari setting.js
+// Muat setting owner dari file setting.js
 let settings = require('./setting');
-// Muat plugin gempa untuk auto-check update gempa
+
+// Muat plugin gempa dan azan
 const gempaPlugin = require('./plugins/gempa');
+const azanPlugin = require('./plugins/azan');
 
 /**
  * Fungsi untuk meminta input dari terminal.
@@ -73,8 +75,7 @@ async function fetchConfig() {
 }
 
 /**
- * Fungsi autentikasi: mengambil array user, meminta username & password,
- * dan mencocokkan kredensial.
+ * Fungsi autentikasi: ambil array user, minta username & password, dan validasi kredensial.
  */
 async function authenticateUser() {
   const configData = await fetchConfig();
@@ -98,22 +99,22 @@ async function authenticateUser() {
 }
 
 /**
- * Fungsi untuk memeriksa pembaruan file remote pada index.js, case.js, package.json,
- * dan file-file dalam folder plugins.
+ * Fungsi untuk memeriksa pembaruan file remote pada file base (index.js, case.js, package.json)
+ * dan file-file di folder plugins.
  */
 async function checkForRemoteUpdates(sock) {
-  // Cek file base: index.js, case.js, package.json
+  // Daftar file base yang akan dicek
   const filesToCheck = [
     { localFile: 'index.js', remoteUrl: 'https://raw.githubusercontent.com/Marshalyel/Mars/master/index.js' },
     { localFile: 'case.js', remoteUrl: 'https://raw.githubusercontent.com/Marshalyel/Mars/master/case.js' },
     { localFile: 'package.json', remoteUrl: 'https://raw.githubusercontent.com/Marshalyel/Mars/master/package.json' }
   ];
+
   for (const fileObj of filesToCheck) {
     try {
       const remoteResponse = await axios.get(fileObj.remoteUrl);
       let remoteContent = remoteResponse.data;
-      // Jika file adalah package.json atau data bukan string, stringify data tersebut
-      if (fileObj.localFile === 'package.json' || typeof remoteContent !== 'string') {
+      if (typeof remoteContent !== 'string') {
         remoteContent = JSON.stringify(remoteContent, null, 2);
       } else {
         remoteContent = remoteContent.trim();
@@ -121,17 +122,17 @@ async function checkForRemoteUpdates(sock) {
       let localContent = fs.readFileSync(fileObj.localFile, 'utf8').trim();
       if (localContent !== remoteContent) {
         const ownerJid = settings.owner;
-        const warnMessage = `Peringatan: Terdeteksi perubahan kode pada ${fileObj.localFile} di GitHub. Silakan lakukan !update.`;
+        const warnMessage = `Peringatan: Terdeteksi perubahan pada ${fileObj.localFile} di GitHub. Silakan lakukan !update.`;
         await sock.sendMessage(ownerJid, { text: warnMessage });
         console.log(chalk.yellow(`Peringatan dikirim ke ${ownerJid} karena ${fileObj.localFile} berbeda.`));
-        break; // Mengirim satu peringatan untuk menghindari spam
+        break; // Hanya mengirim satu peringatan
       }
     } catch (error) {
       console.error(chalk.red(`Gagal memeriksa pembaruan untuk ${fileObj.localFile}:`), error);
     }
   }
 
-  // Cek file dalam folder plugins
+  // Periksa file di folder plugins
   const pluginsPath = path.join(__dirname, 'plugins');
   if (fs.existsSync(pluginsPath)) {
     const pluginFiles = fs.readdirSync(pluginsPath).filter(file => file.endsWith('.js'));
@@ -148,7 +149,7 @@ async function checkForRemoteUpdates(sock) {
         let localContent = fs.readFileSync(path.join(pluginsPath, file), 'utf8').trim();
         if (localContent !== remoteContent) {
           const ownerJid = settings.owner;
-          const warnMessage = `Peringatan: Terdeteksi perubahan kode pada plugin ${file} di GitHub. Silakan lakukan !update plugins.`;
+          const warnMessage = `Peringatan: Terdeteksi perubahan pada plugin ${file} di GitHub. Silakan lakukan !update plugins.`;
           await sock.sendMessage(ownerJid, { text: warnMessage });
           console.log(chalk.yellow(`Peringatan dikirim ke ${ownerJid} karena plugin ${file} berbeda.`));
           break;
@@ -161,7 +162,7 @@ async function checkForRemoteUpdates(sock) {
 }
 
 /**
- * Fungsi updateFile: mengambil konten file remote dan menimpanya secara lokal.
+ * Fungsi updateFile: mengambil konten remote dan menimpa file lokal.
  */
 async function updateFile(sock, message, fileName, remoteUrl) {
   const chatId = message.key.remoteJid;
@@ -185,7 +186,7 @@ async function updateFile(sock, message, fileName, remoteUrl) {
 
 /**
  * Fungsi updatePlugins: mengambil daftar file plugin dari GitHub menggunakan API,
- * dan menimpa file lokal dengan konten remote.
+ * dan menimpa file lokal di folder plugins.
  */
 async function updatePlugins(sock, message) {
   const pluginsPath = path.join(__dirname, 'plugins');
@@ -284,6 +285,17 @@ async function startSock() {
     setInterval(() => {
       gempaPlugin.autoCheck(sock);
     }, 60000);
+    // Cek update jadwal azan secara periodik (dari plugin azan, jika tersedia)
+    try {
+      const azanPlugin = require('./plugins/azan');
+      if (typeof azanPlugin.autoRun === 'function') {
+        setInterval(() => {
+          azanPlugin.autoRun(sock);
+        }, 60000);
+      }
+    } catch (e) {
+      console.error(chalk.red("Plugin azan tidak ditemukan atau error:"), e);
+    }
   } catch (error) {
     console.error(chalk.red("Error in startSock:"), error);
   }
