@@ -60,7 +60,6 @@ async function ytdl(url) {
     const vidId = url.match(ytRegex)[3];
     const webb = await axios.get('https://ytmp3.cc/Vluk/', { headers });
     
-    // Ekstrak token dari response menggunakan regex dan atob
     const tokenMatch = webb.data?.match(/atob\('(.*?)'\)/);
     if (!tokenMatch) throw new Error('Token tidak ditemukan');
     const tokenData = tokenMatch[1];
@@ -108,7 +107,6 @@ module.exports = {
   run: async (sock, message, args) => {
     const chatId = message.key.remoteJid;
     try {
-      // Gabungkan argumen menjadi query
       if (!args.length) {
         return await sock.sendMessage(chatId, { text: 'Masukkan query pencarian, misal: !youtube tutorial javascript' });
       }
@@ -130,7 +128,7 @@ module.exports = {
         return;
       }
 
-      // Jika query berupa link YouTube, langsung download audio
+      // Jika query merupakan link YouTube, langsung download audio
       if (ytRegex.test(query)) {
         const { title, link } = await ytdl(query);
         await sock.sendMessage(
@@ -180,23 +178,24 @@ module.exports = {
             buttons: [
               {
                 name: "cta_copy",
+                // Perbaikan: gunakan property "copyText" (camelCase) agar URL tersalin dengan benar
                 buttonParamsJson: JSON.stringify({
                   display_text: "Salin Link",
-                  copy_text: video.url
+                  copyText: video.url
                 })
               },
               {
                 name: "cta_mp3",
                 buttonParamsJson: JSON.stringify({
                   display_text: "Download MP3",
-                  copy_text: "ytmp3:" + video.url
+                  copyText: "ytmp3:" + video.url
                 })
               },
               {
                 name: "cta_mp4",
                 buttonParamsJson: JSON.stringify({
                   display_text: "Download MP4",
-                  copy_text: "ytmp4:" + video.url
+                  copyText: "ytmp4:" + video.url
                 })
               }
             ]
