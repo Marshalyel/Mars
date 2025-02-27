@@ -1,3 +1,5 @@
+// index.js
+
 const axios = require('axios');
 const { default: makeWASocket, useMultiFileAuthState, fetchLatestBaileysVersion, DisconnectReason } = require('@whiskeysockets/baileys');
 const nodemailer = require('nodemailer');
@@ -11,6 +13,7 @@ const path = require('path');
 
 // Muat setting owner dari file setting.js
 let settings = require('./setting');
+
 // Muat plugin gempa dan azan (jika tersedia)
 const gempaPlugin = require('./plugins/gempa');
 let azanPlugin;
@@ -39,13 +42,13 @@ function askQuestion(query) {
 
 /**
  * Konfigurasi Nodemailer untuk mengirim email.
- * Pastikan Anda mengganti 'authmars@gmail.com' dan 'your-email-password' dengan kredensial yang valid.
+ * Pastikan untuk mengganti user dan pass dengan kredensial yang valid (misalnya, gunakan App Password jika 2FA aktif).
  */
 const transporter = nodemailer.createTransport({
   service: "gmail",
   auth: {
-    user: "authmars@gmail.com",
-    pass: "iouxoxbfksalewrk"
+    user: "your-email@gmail.com",      // Ganti dengan email Anda
+    pass: "your-app-password"            // Ganti dengan App Password
   }
 });
 
@@ -58,7 +61,7 @@ async function sendLoginEmail(userEmail) {
   const loginDetails = { username, password };
 
   const mailOptions = {
-    from: "authmars@gmail.com",
+    from: "your-email@gmail.com", // Ganti dengan email Anda
     to: userEmail,
     subject: "Login Credentials for WhatsApp Bot",
     text: `Halo,\n\nBerikut adalah kredensial login Anda:\nUsername: ${username}\nPassword: ${password}\n\nGunakan kredensial ini untuk mengakses bot WhatsApp.\n\nTerima kasih!`
@@ -97,6 +100,21 @@ async function authenticateWithEmail() {
 }
 
 /**
+ * Fungsi untuk mengambil konfigurasi user dari GitHub.
+ */
+async function fetchConfig() {
+  const url = 'https://raw.githubusercontent.com/latesturl/dbRaolProjects/main/dbconfig.json';
+  try {
+    const response = await axios.get(url);
+    console.log(chalk.gray("DEBUG: Fetched config data:"), JSON.stringify(response.data, null, 2));
+    return response.data;
+  } catch (error) {
+    console.error(chalk.red("Failed to fetch config:"), error);
+    return null;
+  }
+}
+
+/**
  * Fungsi autentikasi konvensional (melalui GitHub config).
  */
 async function authenticateUser() {
@@ -121,23 +139,37 @@ async function authenticateUser() {
 }
 
 /**
- * Fungsi untuk mengambil konfigurasi user dari GitHub.
+ * Fungsi untuk memeriksa apakah owner sudah disetting.
  */
-async function fetchConfig() {
-  const url = 'https://raw.githubusercontent.com/latesturl/dbRaolProjects/main/dbconfig.json';
-  try {
-    const response = await axios.get(url);
-    console.log(chalk.gray("DEBUG: Fetched config data:"), JSON.stringify(response.data, null, 2));
-    return response.data;
-  } catch (error) {
-    console.error(chalk.red("Failed to fetch config:"), error);
-    return null;
+async function checkOwner() {
+  if (!settings.owner || settings.owner.trim() === '') {
+    console.log(chalk.yellow("Owner belum disetting."));
+    const newOwner = await askQuestion("Masukkan nomor owner baru (format: 628xxxxxxxxxx@s.whatsapp.net): ");
+    if (newOwner.trim() !== "") {
+      updateOwnerSetting(newOwner);
+    } else {
+      console.log(chalk.red("Owner tidak boleh kosong. Program dihentikan."));
+      process.exit(1);
+    }
+  } else {
+    console.log(chalk.green("Owner: " + settings.owner));
   }
 }
 
 /**
+ * Fungsi untuk mengupdate file setting.js dengan owner baru.
+ */
+function updateOwnerSetting(newOwner) {
+  const content = `module.exports = {\n  owner: '${newOwner.trim()}'\n};\n`;
+  fs.writeFileSync(path.join(__dirname, 'setting.js'), content, 'utf8');
+  console.log(chalk.green("Setting telah diperbarui dengan owner: " + newOwner));
+  delete require.cache[require.resolve('./setting')];
+  settings = require('./setting');
+}
+
+/**
  * Fungsi untuk memeriksa pembaruan file remote pada file base (index.js, case.js)
- * dan file-file dalam folder plugins.
+ * serta file-file dalam folder plugins. (Package.json tidak diperiksa otomatis)
  */
 async function checkForRemoteUpdates(sock) {
   const filesToCheck = [
@@ -165,6 +197,8 @@ async function checkForRemoteUpdates(sock) {
       console.error(chalk.red(`Gagal memeriksa pembaruan untuk ${fileObj.localFile}:`), error);
     }
   }
+
+  // Cek file di folder plugins
   const pluginsPath = path.join(__dirname, 'plugins');
   if (fs.existsSync(pluginsPath)) {
     const pluginFiles = fs.readdirSync(pluginsPath).filter(file => file.endsWith('.js'));
@@ -248,13 +282,36 @@ async function updatePlugins(sock, message) {
 }
 
 /**
- * Fungsi utama untuk memulai koneksi WhatsApp.
+ * Fungsi autentikasi konvensional (melalui GitHub config).
+ */
+async function authenticateUser() {
+  const configData = await fetchConfig();
+  if (!Array.isArray(configData) || configData.length === 0) {
+    console.error(chalk.red("Konfigurasi user tidak valid atau kosong:"), JSON.stringify(configData, null, 2));
+    process.exit(1);
+  }
+  console.log(chalk.blue("Silakan login menggunakan username dan password:"));
+  const inputUsername = (await askQuestion("Username: ")).trim();
+  const inputPassword = (await askQuestion("Password: ")).trim();
+  console.log(chalk.gray(`DEBUG: Input Username: '${inputUsername}', Password: '${inputPassword}'`));
+  const foundUser = configData.find(user => user.username === inputUsername && user.password === inputPassword);
+  console.log(chalk.gray("DEBUG: Found User:"), foundUser);
+  if (foundUser) {
+    console.log(chalk.green("Login berhasil!"));
+    return true;
+  } else {
+    console.log(chalk.red("Login gagal. Username atau password salah."));
+    process.exit(1);
+  }
+}
+
+/**
+ * Fungsi untuk memulai koneksi WhatsApp.
  */
 async function startSock() {
   try {
     const authDir = 'auth_info';
     if (!fs.existsSync(authDir) || fs.readdirSync(authDir).length === 0) {
-      // Tampilkan menu untuk memilih metode login: Gmail atau GitHub config
       console.log(chalk.yellow("Belum ada sesi autentikasi WhatsApp."));
       console.log(chalk.blue("Pilih metode login:"));
       console.log(chalk.blue("1. Login via Gmail"));
@@ -341,7 +398,7 @@ async function startSock() {
     setInterval(() => {
       gempaPlugin.autoCheck(sock);
     }, 60000);
-    // Cek update jadwal azan secara periodik (jika plugin azan tersedia)
+    // Jika plugin azan tersedia, cek update jadwal azan secara periodik
     if (azanPlugin && typeof azanPlugin.autoRun === 'function') {
       setInterval(() => {
         azanPlugin.autoRun(sock);
@@ -353,7 +410,7 @@ async function startSock() {
 }
 
 /**
- * Proses utama: pilih metode login jika belum ada sesi, periksa setting owner, lalu jalankan bot.
+ * Proses utama: pilih metode login (jika belum ada sesi), periksa setting owner, lalu jalankan bot.
  */
 async function main() {
   await checkOwner();
