@@ -4,7 +4,11 @@ const axios = require('axios');
 
 let lastGempaDateTime = null; // Menyimpan waktu gempa terakhir
 
-// Fungsi pembantu: cek data gempa dan notifikasi ke owner jika ada update
+/**
+ * Fungsi pembantu: cek data gempa dan notifikasi ke owner jika ada update
+ * @param {Object} sock - Instance WhatsApp socket
+ * @param {string} ownerJid - Nomor owner dalam format JID
+ */
 async function checkGempaAndNotify(sock, ownerJid) {
   try {
     const response = await axios.get('https://data.bmkg.go.id/DataMKG/TEWS/autogempa.json');
@@ -19,7 +23,7 @@ async function checkGempaAndNotify(sock, ownerJid) {
     // Gunakan properti DateTime jika ada, atau gabungan Tanggal dan Jam
     const currentDateTime = gempa.DateTime || `${gempa.Tanggal || ''} ${gempa.Jam || ''}`.trim();
 
-    // Jika belum pernah disimpan, simpan data sekarang
+    // Jika belum pernah disimpan, simpan data sekarang dan keluar
     if (!lastGempaDateTime) {
       lastGempaDateTime = currentDateTime;
       console.log("Data gempa awal disimpan:", lastGempaDateTime);
@@ -39,11 +43,10 @@ async function checkGempaAndNotify(sock, ownerJid) {
                          `Bujur      : ${gempa.Bujur || 'N/A'}\n` +
                          `Wilayah    : ${gempa.Wilayah || 'N/A'}\n` +
                          `Potensi    : ${gempa.Potensi || 'N/A'}`;
-      // Jika properti Shakemap tersedia, pastikan URL lengkap
       if (gempa.Shakemap) {
         let shakemapUrl = gempa.Shakemap;
         if (!shakemapUrl.startsWith('http')) {
-          // Misalnya, jika hanya nama file, tambahkan base URL
+          // Tambahkan base URL jika hanya nama file
           shakemapUrl = 'https://data.bmkg.go.id/DataMKG/TEWS/' + shakemapUrl;
         }
         await sock.sendMessage(ownerJid, { image: { url: shakemapUrl }, caption: infoText });
