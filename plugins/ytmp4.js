@@ -58,10 +58,11 @@ async function convertYouTube(url, format = 'mp4') {
     return { title: res.title, link: res.downloadURL };
   } else {
     let res, retry = 0;
+    // Tingkatkan batas retry dan waktu tunggu
     do {
-      if (retry > 50) throw new Error('Timeout');
+      if (retry > 100) throw new Error('Timeout');
       res = await axios.get(convert.progressURL, { headers }).then(x => x.data);
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await new Promise(resolve => setTimeout(resolve, 1500));
       retry++;
     } while (res.progress < 3);
     return { title: res.title, link: convert.downloadURL };
