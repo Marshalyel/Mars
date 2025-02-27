@@ -48,8 +48,8 @@ const headers = {
 };
 
 /**
- * Fungsi ytdl: mengonversi link YouTube menjadi link download MP3
- * @param {string} url - Link YouTube
+ * Fungsi ytdl: Mengonversi link YouTube menjadi link download MP3.
+ * @param {string} url - Link YouTube.
  * @returns {Promise<{title: string, link: string}>}
  */
 async function ytdl(url) {
@@ -59,7 +59,6 @@ async function ytdl(url) {
   try {
     const vidId = url.match(ytRegex)[3];
     const webb = await axios.get('https://ytmp3.cc/Vluk/', { headers });
-    
     const tokenMatch = webb.data?.match(/atob\('(.*?)'\)/);
     if (!tokenMatch) throw new Error('Token tidak ditemukan');
     const tokenData = tokenMatch[1];
@@ -67,14 +66,8 @@ async function ytdl(url) {
     if (!tokenJsonMatch) throw new Error('Token JSON tidak ditemukan');
     const tokenJson = JSON.parse(tokenJsonMatch[1]);
     const token = btoa(tokenJson[2] + "-" + tokenizer(tokenJson, tokenJson.f[6]));
-    
-    const init = await axios
-      .get(`https://d.ecoe.cc/api/v1/init?k=${token}&_=${Math.random()}`, { headers })
-      .then(x => x.data);
-    const convert = await axios
-      .get(`${init.convertURL}&v=https://www.youtube.com/watch?v=${vidId}&f=mp3&_=${Math.random()}`, { headers })
-      .then(x => x.data);
-    
+    const init = await axios.get(`https://d.ecoe.cc/api/v1/init?k=${token}&_=${Math.random()}`, { headers }).then(x => x.data);
+    const convert = await axios.get(`${init.convertURL}&v=https://www.youtube.com/watch?v=${vidId}&f=mp3&_=${Math.random()}`, { headers }).then(x => x.data);
     if (convert.redirectURL) {
       const res = await axios.get(convert.redirectURL, { headers }).then(x => x.data);
       return {
@@ -103,7 +96,7 @@ async function ytdl(url) {
 
 module.exports = {
   name: 'youtube',
-  description: 'Melakukan pencarian video YouTube dan menampilkan hasil dalam bentuk carousel interaktif. Jika query berupa link atau menggunakan prefix "ytmp3:", langsung download audio MP3.',
+  description: 'Melakukan pencarian video YouTube dan menampilkan hasil dalam bentuk carousel interaktif. Jika query berupa link atau dengan prefix "ytmp3:", langsung download audio MP3.',
   run: async (sock, message, args) => {
     const chatId = message.key.remoteJid;
     try {
@@ -112,7 +105,7 @@ module.exports = {
       }
       let query = args.join(' ').trim();
 
-      // Jika query diawali dengan "ytmp3:" maka langsung proses download audio
+      // Jika query diawali dengan "ytmp3:" langsung proses download audio
       if (query.startsWith('ytmp3:')) {
         const url = query.slice(6).trim();
         const { title, link } = await ytdl(url);
@@ -127,8 +120,7 @@ module.exports = {
         );
         return;
       }
-
-      // Jika query merupakan link YouTube, langsung download audio
+      // Jika query merupakan link YouTube langsung download audio
       if (ytRegex.test(query)) {
         const { title, link } = await ytdl(query);
         await sock.sendMessage(
@@ -142,23 +134,19 @@ module.exports = {
         );
         return;
       }
-
-      // Jika query bukan link, lakukan pencarian menggunakan yt-search
+      // Jika query bukan link, lakukan pencarian dengan yt-search
       const searchResult = await yts(query);
       const videos = searchResult.videos.slice(0, 7);
       if (!videos.length) {
         return await sock.sendMessage(chatId, { text: 'Video tidak ditemukan!' });
       }
-      
-      // Opsional: kirim pesan loading agar user menunggu
+      // Kirim pesan loading
       await sock.sendMessage(chatId, { text: "*Loading* ⌛ \n> Tunggu beberapa detik..." });
-      
       // Buat array card untuk carousel
       let cards = [];
       for (const video of videos) {
         let mediaMsg = {};
         try {
-          // Siapkan thumbnail dengan upload function
           mediaMsg = await prepareWAMessageMedia(
             { image: { url: video.thumbnail } },
             { upload: sock.waUploadToServer.bind(sock) }
@@ -166,7 +154,6 @@ module.exports = {
         } catch (err) {
           console.error("Error preparing thumbnail:", err);
         }
-        
         // Buat card interaktif dengan tombol deposit-style
         const card = {
           header: proto.Message.InteractiveMessage.Header.fromObject({
@@ -199,7 +186,6 @@ module.exports = {
         };
         cards.push(card);
       }
-      
       // Buat pesan carousel interaktif
       const interactiveMsgContent = {
         viewOnceMessage: {
@@ -226,7 +212,6 @@ module.exports = {
         { userJid: chatId, quoted: message }
       );
       await sock.relayMessage(chatId, msg.message, { messageId: msg.key.id });
-      
     } catch (error) {
       console.error("Error during YouTube processing:", error);
       return await sock.sendMessage(chatId, { text: 'Gagal memproses YouTube.' });
