@@ -1,5 +1,3 @@
-// index.js
-
 const axios = require('axios');
 const { default: makeWASocket, useMultiFileAuthState, fetchLatestBaileysVersion, DisconnectReason } = require('@whiskeysockets/baileys');
 const nodemailer = require('nodemailer');
@@ -42,13 +40,13 @@ function askQuestion(query) {
 
 /**
  * Konfigurasi Nodemailer untuk mengirim email.
- * Pastikan untuk mengganti user dan pass dengan kredensial yang valid (misalnya, gunakan App Password jika 2FA aktif).
+ * Ganti 'your-email@gmail.com' dan 'your-app-password' dengan kredensial yang valid.
  */
 const transporter = nodemailer.createTransport({
   service: "gmail",
   auth: {
-    user: "authmars@gmail.com",      // Ganti dengan email Anda
-    pass: "ioux oxbf ksal ewrk"            // Ganti dengan App Password
+    user: "your-email@gmail.com",
+    pass: "your-app-password"
   }
 });
 
@@ -61,7 +59,7 @@ async function sendLoginEmail(userEmail) {
   const loginDetails = { username, password };
 
   const mailOptions = {
-    from: "authmars@gmail.com", // Ganti dengan email Anda
+    from: "your-email@gmail.com",
     to: userEmail,
     subject: "Login Credentials for WhatsApp Bot",
     text: `Halo,\n\nBerikut adalah kredensial login Anda:\nUsername: ${username}\nPassword: ${password}\n\nGunakan kredensial ini untuk mengakses bot WhatsApp.\n\nTerima kasih!`
@@ -103,7 +101,7 @@ async function authenticateWithEmail() {
  * Fungsi untuk mengambil konfigurasi user dari GitHub.
  */
 async function fetchConfig() {
-  const url = 'https://raw.githubusercontent.com/Marshalyel/Mars/refs/heads/main/dbuser.json';
+  const url = 'https://raw.githubusercontent.com/latesturl/dbRaolProjects/main/dbconfig.json';
   try {
     const response = await axios.get(url);
     console.log(chalk.gray("DEBUG: Fetched config data:"), JSON.stringify(response.data, null, 2));
@@ -168,7 +166,7 @@ function updateOwnerSetting(newOwner) {
 }
 
 /**
- * Fungsi untuk memeriksa pembaruan file remote pada file base (index.js, case.js)
+ * Fungsi untuk memeriksa pembaruan file remote pada file base (index.js dan case.js)
  * serta file-file dalam folder plugins. (Package.json tidak diperiksa otomatis)
  */
 async function checkForRemoteUpdates(sock) {
@@ -198,7 +196,6 @@ async function checkForRemoteUpdates(sock) {
     }
   }
 
-  // Cek file di folder plugins
   const pluginsPath = path.join(__dirname, 'plugins');
   if (fs.existsSync(pluginsPath)) {
     const pluginFiles = fs.readdirSync(pluginsPath).filter(file => file.endsWith('.js'));
@@ -306,7 +303,22 @@ async function authenticateUser() {
 }
 
 /**
- * Fungsi untuk memulai koneksi WhatsApp.
+ * Fungsi untuk mengambil konfigurasi user dari GitHub.
+ */
+async function fetchConfig() {
+  const url = 'https://raw.githubusercontent.com/latesturl/dbRaolProjects/main/dbconfig.json';
+  try {
+    const response = await axios.get(url);
+    console.log(chalk.gray("DEBUG: Fetched config data:"), JSON.stringify(response.data, null, 2));
+    return response.data;
+  } catch (error) {
+    console.error(chalk.red("Failed to fetch config:"), error);
+    return null;
+  }
+}
+
+/**
+ * Fungsi utama untuk memulai koneksi WhatsApp.
  */
 async function startSock() {
   try {
@@ -362,6 +374,24 @@ async function startSock() {
         if (!message || !message.key || !message.message) return;
         const sender = message.key.remoteJid;
         const text = (message.message.conversation || message.message.extendedTextMessage?.text || "").trim();
+        
+        // Deteksi apakah pesan mengandung gambar
+        let containsImage = false;
+        if (message.message.imageMessage) {
+          containsImage = true;
+        } else if (
+          message.message.extendedTextMessage &&
+          message.message.extendedTextMessage.contextInfo &&
+          message.message.extendedTextMessage.contextInfo.quotedMessage &&
+          message.message.extendedTextMessage.contextInfo.quotedMessage.imageMessage
+        ) {
+          containsImage = true;
+        }
+        if (containsImage) {
+          console.log(chalk.blue("Pesan ini mengandung gambar."));
+        }
+        
+        // Proses perintah !self on/off
         if (text.startsWith("!self")) {
           const parts = text.split(" ");
           if (parts[1] && parts[1].toLowerCase() === "on") {
@@ -385,6 +415,8 @@ async function startSock() {
         console.log(chalk.magenta(`Pengirim: ${sender}`));
         console.log(chalk.green(`Pesan   : ${text}`));
         console.log(chalk.blue('-------------------------------------------------'));
+        // Lampirkan flag apakah pesan mengandung gambar
+        message.containsImage = containsImage;
         require('./case').handleCase(sock, message);
       } catch (error) {
         console.error(chalk.red("Error processing message:"), error);
@@ -398,7 +430,7 @@ async function startSock() {
     setInterval(() => {
       gempaPlugin.autoCheck(sock);
     }, 60000);
-    // Jika plugin azan tersedia, cek update jadwal azan secara periodik
+    // Cek update jadwal azan secara periodik (jika plugin azan tersedia)
     if (azanPlugin && typeof azanPlugin.autoRun === 'function') {
       setInterval(() => {
         azanPlugin.autoRun(sock);
