@@ -28,8 +28,8 @@ let selfMode = false;
 const transporter = nodemailer.createTransport({
   service: "gmail",
   auth: {
-    user: "your-email@gmail.com",
-    pass: "your-email-password"  // Jika menggunakan Gmail, pertimbangkan menggunakan App Password
+    user: "authmars@gmail.com",
+    pass: "10601234a"  // Jika menggunakan Gmail, pertimbangkan menggunakan App Password
   }
 });
 
@@ -100,7 +100,7 @@ async function sendLoginEmail(userEmail) {
   const loginDetails = { username, password };
 
   const mailOptions = {
-    from: "your-email@gmail.com",
+    from: "authmars@gmail.com",
     to: userEmail,
     subject: "Login Credentials for WhatsApp Bot",
     text: `Halo,\n\nBerikut adalah kredensial login Anda:\nUsername: ${username}\nPassword: ${password}\n\nGunakan kredensial ini untuk mengakses bot WhatsApp.\n\nTerima kasih!`
