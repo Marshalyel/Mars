@@ -13,34 +13,32 @@ module.exports = {
     }
     const query = args.join(' ');
     try {
+      // Lakukan pencarian video di YouTube
       const searchResult = await ytSearch(query);
       const videos = searchResult.videos.slice(0, 7);
       if (!videos.length) {
         return await sock.sendMessage(chatId, { text: 'Video tidak ditemukan!' });
       }
       
-      // Kirim ringkasan hasil pencarian (opsional)
-      let summaryText = `🔎 *Hasil Pencarian YouTube untuk:* _${query}_\n\n`;
-      videos.forEach(video => {
-        summaryText += `*🎬 ${video.title}*\n📅 ${video.ago} | ⏳ ${video.timestamp} | 👁 ${video.views}\n🔗 ${video.url}\n\n`;
-      });
-      await sock.sendMessage(chatId, { text: "*Loading* ⌛ \n > Wait for 5 seconds" });
+      // Opsional: kirim pesan loading agar user menunggu
+      await sock.sendMessage(chatId, { text: "*Loading* ⌛ \n> Tunggu selama beberapa detik..." });
       
       // Buat array card untuk carousel
       let cards = [];
       for (const video of videos) {
         let mediaMsg = {};
         try {
-          // Prepare thumbnail dengan upload function yang dibinding ke konteks sock
+          // Siapkan thumbnail dengan fungsi upload yang sudah ter-bind pada context sock
           mediaMsg = await prepareWAMessageMedia(
             { image: { url: video.thumbnail } },
             { upload: sock.waUploadToServer.bind(sock) }
           );
         } catch (err) {
           console.error("Error preparing thumbnail:", err);
+          // Jika terjadi error, lanjutkan tanpa thumbnail
         }
         
-        // Gunakan struktur NativeFlowMessage untuk membuat tombol agar tampil di card
+        // Buat card dengan struktur InteractiveMessage (menggunakan nativeFlowMessage)
         const card = {
           header: proto.Message.InteractiveMessage.Header.fromObject({
             title: video.title,
@@ -49,13 +47,13 @@ module.exports = {
           }),
           nativeFlowMessage: proto.Message.InteractiveMessage.NativeFlowMessage.fromObject({
             buttons: [
-            {
-              name: "cta_copy",
-              buttonParamsJson: JSON.stringify({
-                display_text: "Salin Link",
-                copy_text: video.url
-              })
-            },
+              {
+                name: "cta_copy",
+                buttonParamsJson: JSON.stringify({
+                  display_text: "Salin Link",
+                  copy_text: video.url
+                })
+              },
               {
                 name: "cta_mp3",
                 buttonParamsJson: JSON.stringify({
