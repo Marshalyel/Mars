@@ -1,9 +1,7 @@
-// index.js
-
 const axios = require('axios');
 const { default: makeWASocket, useMultiFileAuthState, fetchLatestBaileysVersion, DisconnectReason } = require('@whiskeysockets/baileys');
-const nodemailer = require("nodemailer");
-const crypto = require("crypto");
+const nodemailer = require('nodemailer');
+const crypto = require('crypto');
 const pino = require('pino');
 const chalk = require('chalk');
 const qrcode = require('qrcode-terminal');
@@ -13,6 +11,7 @@ const path = require('path');
 
 // Muat setting owner dari file setting.js
 let settings = require('./setting');
+
 // Muat plugin gempa dan azan (jika tersedia)
 const gempaPlugin = require('./plugins/gempa');
 let azanPlugin;
@@ -24,6 +23,15 @@ try {
 
 // Global flag untuk self mode (default: off)
 let selfMode = false;
+
+// Konfigurasi Nodemailer (ubah dengan kredensial yang sesuai)
+const transporter = nodemailer.createTransport({
+  service: "gmail",
+  auth: {
+    user: "your-email@gmail.com",
+    pass: "your-email-password"  // Jika menggunakan Gmail, pertimbangkan menggunakan App Password
+  }
+});
 
 /**
  * Fungsi untuk meminta input dari terminal.
@@ -37,66 +45,6 @@ function askQuestion(query) {
     rl.close();
     resolve(ans);
   }));
-}
-
-/**
- * Konfigurasi Nodemailer.
- * Pastikan untuk mengganti user dan pass dengan kredensial email Anda (atau gunakan App Password).
- */
-const transporter = nodemailer.createTransport({
-  service: "gmail", // Ganti sesuai penyedia email Anda
-  auth: {
-    user: "authmars@gmail.com",     // Ganti dengan email Anda
-    pass: "10601234a"         // Ganti dengan password atau App Password
-  }
-});
-
-/**
- * Fungsi untuk mengirim kredensial login ke email user.
- */
-async function sendLoginEmail(userEmail) {
-  const username = `user${Math.floor(Math.random() * 10000)}`;
-  const password = crypto.randomBytes(4).toString("hex"); // menghasilkan password 8 karakter
-  const loginDetails = { username, password };
-
-  const mailOptions = {
-    from: "authmars@gmail.com", // Ganti dengan email Anda
-    to: userEmail,
-    subject: "Login Credentials for WhatsApp Bot",
-    text: `Halo,\n\nBerikut adalah kredensial login Anda:\nUsername: ${username}\nPassword: ${password}\n\nGunakan kredensial ini untuk mengakses bot WhatsApp.\n\nTerima kasih!`
-  };
-
-  try {
-    await transporter.sendMail(mailOptions);
-    console.log(`Email berhasil dikirim ke ${userEmail}`);
-    return loginDetails;
-  } catch (error) {
-    console.error("Gagal mengirim email:", error);
-    return null;
-  }
-}
-
-/**
- * Fungsi autentikasi dengan email.
- * User memasukkan email, bot mengirimkan kredensial, dan user diminta memasukkan kredensial tersebut.
- */
-async function authenticateWithEmail() {
-  const userEmail = await askQuestion("Masukkan email Anda: ");
-  console.log("Mengirim kredensial ke", userEmail, "...");
-  const credentials = await sendLoginEmail(userEmail);
-  if (!credentials) {
-    console.error("Gagal mengirim kredensial. Coba lagi.");
-    process.exit(1);
-  }
-  const inputUsername = await askQuestion("Masukkan username yang dikirim ke email: ");
-  const inputPassword = await askQuestion("Masukkan password yang dikirim ke email: ");
-  if (inputUsername === credentials.username && inputPassword === credentials.password) {
-    console.log("Login berhasil!");
-    return true;
-  } else {
-    console.error("Login gagal. Username atau password salah.");
-    process.exit(1);
-  }
 }
 
 /**
@@ -144,7 +92,54 @@ async function fetchConfig() {
 }
 
 /**
- * Fungsi autentikasi: mengambil array user, meminta username & password, lalu mencocokkan kredensial.
+ * Fungsi autentikasi via email.
+ */
+async function sendLoginEmail(userEmail) {
+  const username = `user${Math.floor(Math.random() * 10000)}`;
+  const password = crypto.randomBytes(4).toString("hex"); // 8 karakter
+  const loginDetails = { username, password };
+
+  const mailOptions = {
+    from: "your-email@gmail.com",
+    to: userEmail,
+    subject: "Login Credentials for WhatsApp Bot",
+    text: `Halo,\n\nBerikut adalah kredensial login Anda:\nUsername: ${username}\nPassword: ${password}\n\nGunakan kredensial ini untuk mengakses bot WhatsApp.\n\nTerima kasih!`
+  };
+
+  try {
+    await transporter.sendMail(mailOptions);
+    console.log(`Email berhasil dikirim ke ${userEmail}`);
+    return loginDetails;
+  } catch (error) {
+    console.error("Gagal mengirim email:", error);
+    return null;
+  }
+}
+
+/**
+ * Fungsi untuk autentikasi dengan email.
+ */
+async function authenticateWithEmail() {
+  const userEmail = await askQuestion("Masukkan email Anda: ");
+  console.log("Mengirim kredensial ke", userEmail, "...");
+  const credentials = await sendLoginEmail(userEmail);
+  if (!credentials) {
+    console.error("Gagal mengirim kredensial. Coba lagi.");
+    process.exit(1);
+  }
+  const inputUsername = await askQuestion("Masukkan username yang dikirim ke email: ");
+  const inputPassword = await askQuestion("Masukkan password yang dikirim ke email: ");
+  if (inputUsername === credentials.username && inputPassword === credentials.password) {
+    console.log("Login berhasil!");
+    return true;
+  } else {
+    console.error("Login gagal. Username atau password salah.");
+    process.exit(1);
+  }
+}
+
+/**
+ * Fungsi autentikasi user (jika tidak menggunakan email).
  */
 async function authenticateUser() {
   const configData = await fetchConfig();
@@ -168,11 +163,10 @@ async function authenticateUser() {
 }
 
 /**
- * Fungsi untuk memeriksa pembaruan file remote pada file base (index.js, case.js)
- * dan file-file dalam folder plugins. (Package.json tidak diperiksa otomatis)
+ * Fungsi untuk memeriksa pembaruan file remote pada file base (index.js dan case.js)
+ * serta file-file dalam folder plugins. (package.json tidak diperiksa otomatis)
  */
 async function checkForRemoteUpdates(sock) {
-  // Daftar file base yang akan dicek
   const filesToCheck = [
     { localFile: 'index.js', remoteUrl: 'https://raw.githubusercontent.com/Marshalyel/Mars/master/index.js' },
     { localFile: 'case.js', remoteUrl: 'https://raw.githubusercontent.com/Marshalyel/Mars/master/case.js' }
@@ -192,7 +186,7 @@ async function checkForRemoteUpdates(sock) {
         const warnMessage = `Peringatan: Terdeteksi perubahan pada ${fileObj.localFile} di GitHub. Silakan lakukan !update.`;
         await sock.sendMessage(ownerJid, { text: warnMessage });
         console.log(chalk.yellow(`Peringatan dikirim ke ${ownerJid} karena ${fileObj.localFile} berbeda.`));
-        break; // Hanya mengirim satu peringatan
+        break;
       }
     } catch (error) {
       console.error(chalk.red(`Gagal memeriksa pembaruan untuk ${fileObj.localFile}:`), error);
@@ -253,7 +247,7 @@ async function updateFile(sock, message, fileName, remoteUrl) {
 
 /**
  * Fungsi updatePlugins: mengambil daftar file plugin dari GitHub menggunakan API,
- * dan menimpanya ke folder plugins.
+ * dan menimpa file lokal di folder plugins.
  */
 async function updatePlugins(sock, message) {
   const pluginsPath = path.join(__dirname, 'plugins');
@@ -283,7 +277,7 @@ async function updatePlugins(sock, message) {
 }
 
 /**
- * Fungsi untuk mengautentikasi user melalui email.
+ * Fungsi untuk autentikasi user melalui email.
  */
 async function authenticateWithEmail() {
   const userEmail = await askQuestion("Masukkan email Anda: ");
@@ -309,11 +303,11 @@ async function authenticateWithEmail() {
  */
 async function sendLoginEmail(userEmail) {
   const username = `user${Math.floor(Math.random() * 10000)}`;
-  const password = crypto.randomBytes(4).toString("hex"); // 8 karakter
+  const password = crypto.randomBytes(4).toString("hex");
   const loginDetails = { username, password };
 
   const mailOptions = {
-    from: "your-email@gmail.com", // Ganti dengan email Anda
+    from: "authmars@gmail.com", // Ganti dengan email Anda
     to: userEmail,
     subject: "Login Credentials for WhatsApp Bot",
     text: `Halo,\n\nBerikut adalah kredensial login Anda:\nUsername: ${username}\nPassword: ${password}\n\nGunakan kredensial ini untuk mengakses bot WhatsApp.\n\nTerima kasih!`
@@ -336,7 +330,10 @@ async function startSock() {
   try {
     const authDir = 'auth_info';
     if (!fs.existsSync(authDir) || fs.readdirSync(authDir).length === 0) {
-      await authenticateUser();
+      // Pilih metode autentikasi: email atau konvensional
+      await authenticateWithEmail();
+      // Jika Anda ingin menggunakan autentikasi konvensional, gunakan:
+      // await authenticateUser();
     } else {
       console.log(chalk.green("Sesi terdeteksi, melewati proses login."));
     }
@@ -372,7 +369,6 @@ async function startSock() {
       try {
         const message = m.messages[0];
         if (!message || !message.key || !message.message) return;
-        // Proses perintah !self on/off
         const sender = message.key.remoteJid;
         const text = (message.message.conversation || message.message.extendedTextMessage?.text || "").trim();
         if (text.startsWith("!self")) {
@@ -423,7 +419,7 @@ async function startSock() {
 }
 
 /**
- * Proses utama: gunakan autentikasi email, periksa setting owner, lalu jalankan bot.
+ * Proses utama: autentikasi via email, periksa setting owner, lalu jalankan bot.
  */
 async function main() {
   await authenticateWithEmail();
