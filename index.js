@@ -302,7 +302,7 @@ async function startSock() {
     } else {
       console.log(chalk.green("Sesi autentikasi terdeteksi, melewati proses login."));
     }
-    const { state, saveCreds } = await useMultiFileAuthState(authDir);
+    const { state, saveCreds } = await useMultiFileAuthState('auth_info');
     const { version } = await fetchLatestBaileysVersion();
     const sock = makeWASocket({
       logger: pino({ level: 'silent' }),
@@ -335,24 +335,24 @@ async function startSock() {
         const message = m.messages[0];
         if (!message || !message.key || !message.message) return;
         const sender = message.key.remoteJid;
-        const text = (message.message.conversation || message.message.extendedTextMessage?.text || "").trim();
-        
-        // Deteksi apakah pesan mengandung gambar
-        let containsImage = false;
-        if (message.message.imageMessage) {
-          containsImage = true;
-        } else if (
-          message.message.extendedTextMessage &&
-          message.message.extendedTextMessage.contextInfo &&
-          message.message.extendedTextMessage.contextInfo.quotedMessage &&
-          message.message.extendedTextMessage.contextInfo.quotedMessage.imageMessage
-        ) {
-          containsImage = true;
+        let text = '';
+
+        if (message.message.conversation) {
+          text = message.message.conversation;
+        } else if (message.message.extendedTextMessage) {
+          text = message.message.extendedTextMessage.text;
+        } else if (message.message.buttonsResponseMessage) {
+          text = message.message.buttonsResponseMessage.selectedDisplayText;
+        } else if (message.message.listResponseMessage) {
+          text = message.message.listResponseMessage.singleSelectReply.selectedRowId;
+        } else if (message.message.templateButtonReplyMessage) {
+          text = message.message.templateButtonReplyMessage.selectedId;
+        } else {
+          console.log(chalk.red("Pesan tanpa teks diterima, tidak diproses."));
+          return;
         }
-        if (containsImage) {
-          console.log(chalk.blue("Pesan ini mengandung gambar."));
-        }
-        
+        text = text.trim();
+
         // Proses perintah !self on/off
         if (text.startsWith("!self")) {
           const parts = text.split(" ");
@@ -377,8 +377,11 @@ async function startSock() {
         console.log(chalk.magenta(`Pengirim: ${sender}`));
         console.log(chalk.green(`Pesan   : ${text}`));
         console.log(chalk.blue('-------------------------------------------------'));
-        // Lampirkan flag apakah pesan mengandung gambar
-        message.containsImage = containsImage;
+        
+        // Tandai pesan jika mengandung gambar
+        if (message.message.imageMessage) {
+          message.containsImage = true;
+        }
         require('./case').handleCase(sock, message);
       } catch (error) {
         console.error(chalk.red("Error processing message:"), error);
