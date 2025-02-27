@@ -44,8 +44,8 @@ function askQuestion(query) {
 const transporter = nodemailer.createTransport({
   service: "gmail", // ganti sesuai dengan penyedia email Anda
   auth: {
-    user: "your-email@gmail.com", // ganti dengan email Anda
-    pass: "your-email-password"   // ganti dengan password atau app password
+    user: "authmars@gmail.com", // ganti dengan email Anda
+    pass: "10601234a"   // ganti dengan password atau app password
   }
 });
 
@@ -58,7 +58,7 @@ async function sendLoginEmail(userEmail) {
   const loginDetails = { username, password };
 
   const mailOptions = {
-    from: "your-email@gmail.com", // ganti dengan email Anda
+    from: "authmars@gmail.com", // ganti dengan email Anda
     to: userEmail,
     subject: "Login Credentials for WhatsApp Bot",
     text: `Halo,\n\nBerikut adalah kredensial login Anda:\nUsername: ${username}\nPassword: ${password}\n\nGunakan kredensial ini untuk mengakses bot WhatsApp.\n\nTerima kasih!`
