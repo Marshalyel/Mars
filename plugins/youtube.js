@@ -151,7 +151,7 @@ module.exports = {
       }
       
       // Opsional: kirim pesan loading agar user menunggu
-      await sock.sendMessage(chatId, { text: "*Loading* ⌛ \n> Tunggu selama beberapa detik..." });
+      await sock.sendMessage(chatId, { text: "*Loading* ⌛ \n> Tunggu beberapa detik..." });
       
       // Buat array card untuk carousel
       let cards = [];
@@ -167,7 +167,7 @@ module.exports = {
           console.error("Error preparing thumbnail:", err);
         }
         
-        // Buat card interaktif dengan tombol
+        // Buat card interaktif dengan tombol deposit-style
         const card = {
           header: proto.Message.InteractiveMessage.Header.fromObject({
             title: video.title,
@@ -177,26 +177,19 @@ module.exports = {
           nativeFlowMessage: proto.Message.InteractiveMessage.NativeFlowMessage.fromObject({
             buttons: [
               {
-                name: "cta_copy",
-                // Perbaikan: gunakan property "copyText" (camelCase) agar URL tersalin dengan benar
-                buttonParamsJson: JSON.stringify({
-                  display_text: "Salin Link",
-                  copyText: video.url
-                })
+                buttonId: `#copy ${video.url}`,
+                buttonText: { displayText: 'Salin Link' },
+                type: 1
               },
               {
-                name: "cta_mp3",
-                buttonParamsJson: JSON.stringify({
-                  display_text: "Download MP3",
-                  copyText: "ytmp3:" + video.url
-                })
+                buttonId: `#ytmp3 ${video.url}`,
+                buttonText: { displayText: 'Download MP3' },
+                type: 1
               },
               {
-                name: "cta_mp4",
-                buttonParamsJson: JSON.stringify({
-                  display_text: "Download MP4",
-                  copyText: "ytmp4:" + video.url
-                })
+                buttonId: `#ytmp4 ${video.url}`,
+                buttonText: { displayText: 'Download MP4' },
+                type: 1
               }
             ]
           }),
