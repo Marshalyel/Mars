@@ -11,7 +11,6 @@ const path = require('path');
 
 // Muat setting owner dari file setting.js
 let settings = require('./setting');
-
 // Muat plugin gempa dan azan (jika tersedia)
 const gempaPlugin = require('./plugins/gempa');
 let azanPlugin;
@@ -23,15 +22,6 @@ try {
 
 // Global flag untuk self mode (default: off)
 let selfMode = false;
-
-// Konfigurasi Nodemailer (ubah dengan kredensial yang sesuai)
-const transporter = nodemailer.createTransport({
-  service: "gmail",
-  auth: {
-    user: "authmars@gmail.com",
-    pass: "10601234a"  // Jika menggunakan Gmail, pertimbangkan menggunakan App Password
-  }
-});
 
 /**
  * Fungsi untuk meminta input dari terminal.
@@ -48,55 +38,23 @@ function askQuestion(query) {
 }
 
 /**
- * Fungsi untuk mengupdate file setting.js dengan owner baru.
+ * Konfigurasi Nodemailer untuk mengirim email.
+ * Pastikan Anda mengganti 'authmars@gmail.com' dan 'your-email-password' dengan kredensial yang valid.
  */
-function updateOwnerSetting(newOwner) {
-  const content = `module.exports = {\n  owner: '${newOwner.trim()}'\n};\n`;
-  fs.writeFileSync(path.join(__dirname, 'setting.js'), content, 'utf8');
-  console.log(chalk.green("Setting telah diperbarui dengan owner: " + newOwner));
-  delete require.cache[require.resolve('./setting')];
-  settings = require('./setting');
-}
-
-/**
- * Fungsi untuk memeriksa apakah owner sudah terdefinisi.
- */
-async function checkOwner() {
-  if (!settings.owner || settings.owner.trim() === '') {
-    console.log(chalk.yellow("Owner belum disetting."));
-    const newOwner = await askQuestion("Masukkan nomor owner baru (format: 628xxxxxxxxxx@s.whatsapp.net): ");
-    if (newOwner.trim() !== "") {
-      updateOwnerSetting(newOwner);
-    } else {
-      console.log(chalk.red("Owner tidak boleh kosong. Program dihentikan."));
-      process.exit(1);
-    }
-  } else {
-    console.log(chalk.green("Owner: " + settings.owner));
+const transporter = nodemailer.createTransport({
+  service: "gmail",
+  auth: {
+    user: "authmars@gmail.com",
+    pass: "ioux oxbf ksal ewrk"
   }
-}
+});
 
 /**
- * Fungsi untuk mengambil konfigurasi user dari GitHub.
- */
-async function fetchConfig() {
-  const url = 'https://raw.githubusercontent.com/latesturl/dbRaolProjects/main/dbconfig.json';
-  try {
-    const response = await axios.get(url);
-    console.log(chalk.gray("DEBUG: Fetched config data:"), JSON.stringify(response.data, null, 2));
-    return response.data;
-  } catch (error) {
-    console.error(chalk.red("Failed to fetch config:"), error);
-    return null;
-  }
-}
-
-/**
- * Fungsi autentikasi via email.
+ * Fungsi untuk mengirim kredensial login ke email user.
  */
 async function sendLoginEmail(userEmail) {
   const username = `user${Math.floor(Math.random() * 10000)}`;
-  const password = crypto.randomBytes(4).toString("hex"); // 8 karakter
+  const password = crypto.randomBytes(4).toString("hex"); // menghasilkan password 8 karakter
   const loginDetails = { username, password };
 
   const mailOptions = {
@@ -117,7 +75,7 @@ async function sendLoginEmail(userEmail) {
 }
 
 /**
- * Fungsi untuk autentikasi dengan email.
+ * Fungsi autentikasi dengan email.
  */
 async function authenticateWithEmail() {
   const userEmail = await askQuestion("Masukkan email Anda: ");
@@ -139,7 +97,7 @@ async function authenticateWithEmail() {
 }
 
 /**
- * Fungsi autentikasi user (jika tidak menggunakan email).
+ * Fungsi autentikasi konvensional (melalui GitHub config).
  */
 async function authenticateUser() {
   const configData = await fetchConfig();
@@ -163,8 +121,23 @@ async function authenticateUser() {
 }
 
 /**
- * Fungsi untuk memeriksa pembaruan file remote pada file base (index.js dan case.js)
- * serta file-file dalam folder plugins. (package.json tidak diperiksa otomatis)
+ * Fungsi untuk mengambil konfigurasi user dari GitHub.
+ */
+async function fetchConfig() {
+  const url = 'https://raw.githubusercontent.com/latesturl/dbRaolProjects/main/dbconfig.json';
+  try {
+    const response = await axios.get(url);
+    console.log(chalk.gray("DEBUG: Fetched config data:"), JSON.stringify(response.data, null, 2));
+    return response.data;
+  } catch (error) {
+    console.error(chalk.red("Failed to fetch config:"), error);
+    return null;
+  }
+}
+
+/**
+ * Fungsi untuk memeriksa pembaruan file remote pada file base (index.js, case.js)
+ * dan file-file dalam folder plugins.
  */
 async function checkForRemoteUpdates(sock) {
   const filesToCheck = [
@@ -192,8 +165,6 @@ async function checkForRemoteUpdates(sock) {
       console.error(chalk.red(`Gagal memeriksa pembaruan untuk ${fileObj.localFile}:`), error);
     }
   }
-
-  // Cek file di folder plugins
   const pluginsPath = path.join(__dirname, 'plugins');
   if (fs.existsSync(pluginsPath)) {
     const pluginFiles = fs.readdirSync(pluginsPath).filter(file => file.endsWith('.js'));
@@ -247,7 +218,7 @@ async function updateFile(sock, message, fileName, remoteUrl) {
 
 /**
  * Fungsi updatePlugins: mengambil daftar file plugin dari GitHub menggunakan API,
- * dan menimpa file lokal di folder plugins.
+ * dan menimpanya ke folder plugins.
  */
 async function updatePlugins(sock, message) {
   const pluginsPath = path.join(__dirname, 'plugins');
@@ -277,65 +248,28 @@ async function updatePlugins(sock, message) {
 }
 
 /**
- * Fungsi untuk autentikasi user melalui email.
- */
-async function authenticateWithEmail() {
-  const userEmail = await askQuestion("Masukkan email Anda: ");
-  console.log("Mengirim kredensial ke", userEmail, "...");
-  const credentials = await sendLoginEmail(userEmail);
-  if (!credentials) {
-    console.error("Gagal mengirim kredensial. Coba lagi.");
-    process.exit(1);
-  }
-  const inputUsername = await askQuestion("Masukkan username yang dikirim ke email: ");
-  const inputPassword = await askQuestion("Masukkan password yang dikirim ke email: ");
-  if (inputUsername === credentials.username && inputPassword === credentials.password) {
-    console.log("Login berhasil!");
-    return true;
-  } else {
-    console.error("Login gagal. Username atau password salah.");
-    process.exit(1);
-  }
-}
-
-/**
- * Fungsi untuk mengirim email berisi kredensial login.
- */
-async function sendLoginEmail(userEmail) {
-  const username = `user${Math.floor(Math.random() * 10000)}`;
-  const password = crypto.randomBytes(4).toString("hex");
-  const loginDetails = { username, password };
-
-  const mailOptions = {
-    from: "authmars@gmail.com", // Ganti dengan email Anda
-    to: userEmail,
-    subject: "Login Credentials for WhatsApp Bot",
-    text: `Halo,\n\nBerikut adalah kredensial login Anda:\nUsername: ${username}\nPassword: ${password}\n\nGunakan kredensial ini untuk mengakses bot WhatsApp.\n\nTerima kasih!`
-  };
-
-  try {
-    await transporter.sendMail(mailOptions);
-    console.log(`Email berhasil dikirim ke ${userEmail}`);
-    return loginDetails;
-  } catch (error) {
-    console.error("Gagal mengirim email:", error);
-    return null;
-  }
-}
-
-/**
  * Fungsi utama untuk memulai koneksi WhatsApp.
  */
 async function startSock() {
   try {
     const authDir = 'auth_info';
     if (!fs.existsSync(authDir) || fs.readdirSync(authDir).length === 0) {
-      // Pilih metode autentikasi: email atau konvensional
-      await authenticateWithEmail();
-      // Jika Anda ingin menggunakan autentikasi konvensional, gunakan:
-      // await authenticateUser();
+      // Tampilkan menu untuk memilih metode login: Gmail atau GitHub config
+      console.log(chalk.yellow("Belum ada sesi autentikasi WhatsApp."));
+      console.log(chalk.blue("Pilih metode login:"));
+      console.log(chalk.blue("1. Login via Gmail"));
+      console.log(chalk.blue("2. Login via GitHub config"));
+      const choice = await askQuestion("Masukkan pilihan (1/2): ");
+      if (choice.trim() === "1") {
+        await authenticateWithEmail();
+      } else if (choice.trim() === "2") {
+        await authenticateUser();
+      } else {
+        console.log(chalk.red("Pilihan tidak valid. Program dihentikan."));
+        process.exit(1);
+      }
     } else {
-      console.log(chalk.green("Sesi terdeteksi, melewati proses login."));
+      console.log(chalk.green("Sesi autentikasi terdeteksi, melewati proses login."));
     }
     const { state, saveCreds } = await useMultiFileAuthState(authDir);
     const { version } = await fetchLatestBaileysVersion();
@@ -419,10 +353,9 @@ async function startSock() {
 }
 
 /**
- * Proses utama: autentikasi via email, periksa setting owner, lalu jalankan bot.
+ * Proses utama: pilih metode login jika belum ada sesi, periksa setting owner, lalu jalankan bot.
  */
 async function main() {
-  await authenticateWithEmail();
   await checkOwner();
   startSock();
 }
