@@ -9,29 +9,28 @@ module.exports = {
   description: 'Mengubah gambar yang dikirim menjadi URL menggunakan Catbox',
   run: async (sock, message, args) => {
     const chatId = message.key.remoteJid;
-    console.log("Command 'tourl' dipanggil.");
+    console.log("Perintah !tourl dipanggil");
 
-    // Cek apakah pesan memiliki imageMessage atau merupakan quoted image message
-    let imageMessage = message.message?.imageMessage;
-    if (!imageMessage && message.message?.extendedTextMessage?.contextInfo?.quotedMessage?.imageMessage) {
-      imageMessage = message.message.extendedTextMessage.contextInfo.quotedMessage.imageMessage;
-      console.log("Menggunakan imageMessage dari quoted message.");
+    // Cari imageMessage di pesan atau di pesan yang di-quote
+    let imageMsg = message.message?.imageMessage;
+    if (!imageMsg && message.message?.extendedTextMessage?.contextInfo?.quotedMessage?.imageMessage) {
+      imageMsg = message.message.extendedTextMessage.contextInfo.quotedMessage.imageMessage;
+      console.log("Menggunakan imageMessage dari pesan yang di-quote.");
     }
-
-    if (!imageMessage) {
+    if (!imageMsg) {
       console.log("Tidak ditemukan imageMessage dalam pesan.");
       return await sock.sendMessage(chatId, { text: 'Silakan kirim gambar dengan perintah !tourl' });
     }
 
     try {
-      // Unduh media gambar sebagai Buffer
-      const buffer = await downloadMediaMessage(message, 'buffer', {});
+      // Buat objek media khusus yang hanya berisi imageMessage untuk di-download
+      const media = { imageMessage: imageMsg };
+      const buffer = await downloadMediaMessage(media, 'buffer', {});
       console.log("Gambar berhasil diunduh, ukuran buffer:", buffer.length);
 
-      // Siapkan FormData untuk upload ke Catbox
+      // Buat FormData untuk mengupload ke Catbox
       const form = new FormData();
       form.append("reqtype", "fileupload");
-      // Kita gunakan nama file "image.webp" (Catbox mendukung format WebP dan lainnya)
       form.append("fileToUpload", buffer, { filename: "image.webp" });
       
       console.log("Mengunggah gambar ke Catbox...");
@@ -40,7 +39,6 @@ module.exports = {
       });
       console.log("Respons dari Catbox:", response.data);
 
-      // Catbox mengembalikan URL dalam bentuk teks
       const url = response.data.trim();
       await sock.sendMessage(chatId, { text: `Gambar berhasil diupload: ${url}` });
     } catch (error) {
