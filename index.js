@@ -99,9 +99,10 @@ async function authenticateWithEmail() {
 
 /**
  * Fungsi untuk mengambil konfigurasi user dari GitHub.
+ * URL telah diperbarui ke dbuser.json dari repository Mars.
  */
 async function fetchConfig() {
-  const url = 'https://raw.githubusercontent.com/latesturl/dbRaolProjects/main/dbconfig.json';
+  const url = 'https://raw.githubusercontent.com/Marshalyel/Mars/master/dbuser.json';
   try {
     const response = await axios.get(url);
     console.log(chalk.gray("DEBUG: Fetched config data:"), JSON.stringify(response.data, null, 2));
@@ -275,45 +276,6 @@ async function updatePlugins(sock, message) {
   } catch (error) {
     console.error(chalk.red("Gagal memperbarui plugins:"), error);
     await sock.sendMessage(message.key.remoteJid, { text: "Gagal memperbarui plugins." });
-  }
-}
-
-/**
- * Fungsi autentikasi konvensional (melalui GitHub config).
- */
-async function authenticateUser() {
-  const configData = await fetchConfig();
-  if (!Array.isArray(configData) || configData.length === 0) {
-    console.error(chalk.red("Konfigurasi user tidak valid atau kosong:"), JSON.stringify(configData, null, 2));
-    process.exit(1);
-  }
-  console.log(chalk.blue("Silakan login menggunakan username dan password:"));
-  const inputUsername = (await askQuestion("Username: ")).trim();
-  const inputPassword = (await askQuestion("Password: ")).trim();
-  console.log(chalk.gray(`DEBUG: Input Username: '${inputUsername}', Password: '${inputPassword}'`));
-  const foundUser = configData.find(user => user.username === inputUsername && user.password === inputPassword);
-  console.log(chalk.gray("DEBUG: Found User:"), foundUser);
-  if (foundUser) {
-    console.log(chalk.green("Login berhasil!"));
-    return true;
-  } else {
-    console.log(chalk.red("Login gagal. Username atau password salah."));
-    process.exit(1);
-  }
-}
-
-/**
- * Fungsi untuk mengambil konfigurasi user dari GitHub.
- */
-async function fetchConfig() {
-  const url = 'https://raw.githubusercontent.com/latesturl/dbRaolProjects/main/dbconfig.json';
-  try {
-    const response = await axios.get(url);
-    console.log(chalk.gray("DEBUG: Fetched config data:"), JSON.stringify(response.data, null, 2));
-    return response.data;
-  } catch (error) {
-    console.error(chalk.red("Failed to fetch config:"), error);
-    return null;
   }
 }
 
