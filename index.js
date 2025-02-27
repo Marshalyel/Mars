@@ -61,7 +61,7 @@ async function sendLoginEmail(userEmail) {
   const loginDetails = { username, password };
 
   const mailOptions = {
-    from: "your-email@gmail.com", // Ganti dengan email Anda
+    from: "authmars@gmail.com", // Ganti dengan email Anda
     to: userEmail,
     subject: "Login Credentials for WhatsApp Bot",
     text: `Halo,\n\nBerikut adalah kredensial login Anda:\nUsername: ${username}\nPassword: ${password}\n\nGunakan kredensial ini untuk mengakses bot WhatsApp.\n\nTerima kasih!`
@@ -103,7 +103,7 @@ async function authenticateWithEmail() {
  * Fungsi untuk mengambil konfigurasi user dari GitHub.
  */
 async function fetchConfig() {
-  const url = 'https://raw.githubusercontent.com/latesturl/dbRaolProjects/main/dbconfig.json';
+  const url = 'https://raw.githubusercontent.com/Marshalyel/Mars/refs/heads/main/dbuser.json';
   try {
     const response = await axios.get(url);
     console.log(chalk.gray("DEBUG: Fetched config data:"), JSON.stringify(response.data, null, 2));
