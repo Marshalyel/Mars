@@ -47,8 +47,8 @@ function askQuestion(query) {
 const transporter = nodemailer.createTransport({
   service: "gmail",
   auth: {
-    user: "your-email@gmail.com",      // Ganti dengan email Anda
-    pass: "your-app-password"            // Ganti dengan App Password
+    user: "authmars@gmail.com",      // Ganti dengan email Anda
+    pass: "ioux oxbf ksal ewrk"            // Ganti dengan App Password
   }
 });
 
