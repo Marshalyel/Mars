@@ -6,7 +6,9 @@ const fs = require('fs');
 const path = require('path');
 const { proto, generateWAMessageFromContent, prepareWAMessageMedia } = require('@whiskeysockets/baileys');
 
-// Fungsi updateFile: mengambil konten file remote dan menimpanya secara lokal.
+/**
+ * Fungsi updateFile: mengambil konten file remote dan menimpanya secara lokal.
+ */
 async function updateFile(sock, message, fileName, remoteUrl) {
   const chatId = message.key.remoteJid;
   try {
@@ -27,7 +29,10 @@ async function updateFile(sock, message, fileName, remoteUrl) {
   }
 }
 
-// Fungsi updatePlugins: mengambil daftar file plugin dari GitHub menggunakan API, dan menimpanya ke folder plugins.
+/**
+ * Fungsi updatePlugins: mengambil daftar file plugin dari GitHub menggunakan API,
+ * dan menimpanya ke folder plugins.
+ */
 async function updatePlugins(sock, message) {
   const pluginsPath = path.join(__dirname, 'plugins');
   if (!fs.existsSync(pluginsPath)) {
@@ -92,7 +97,7 @@ if (fs.existsSync(pluginsDir)) {
 }
 
 /**
- * Fungsi helper untuk mengekstrak teks dari pesan berdasarkan struktur objek pesan dari Baileys.
+ * Fungsi helper untuk mengekstrak teks dari pesan berdasarkan struktur objek pesan Baileys.
  */
 function getMessageText(m) {
   if (!m.message) return '';
@@ -101,10 +106,12 @@ function getMessageText(m) {
   if (m.message.imageMessage && m.message.imageMessage.caption) return m.message.imageMessage.caption;
   if (m.message.videoMessage && m.message.videoMessage.caption) return m.message.videoMessage.caption;
   if (m.message.buttonsResponseMessage) {
-    // Periksa kedua properti: selectedDisplayText dan selectedButtonId
+    // Cek kedua properti untuk tombol
     return m.message.buttonsResponseMessage.selectedDisplayText || m.message.buttonsResponseMessage.selectedButtonId || '';
   }
-  if (m.message.listResponseMessage && m.message.listResponseMessage.singleSelectReply && m.message.listResponseMessage.singleSelectReply.selectedRowId) {
+  if (m.message.listResponseMessage &&
+      m.message.listResponseMessage.singleSelectReply &&
+      m.message.listResponseMessage.singleSelectReply.selectedRowId) {
     return m.message.listResponseMessage.singleSelectReply.selectedRowId;
   }
   if (m.message.templateButtonReplyMessage && m.message.templateButtonReplyMessage.selectedId) {
@@ -166,6 +173,7 @@ async function handleCase(sock, message) {
     const resp = customCommands.textCommands[text];
     return sock.sendMessage(chatId, { text: resp });
   }
+
   // Eksekusi custom plugin command jika ada
   if (customCommands.pluginCommands[text]) {
     try {
