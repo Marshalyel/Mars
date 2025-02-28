@@ -35,7 +35,7 @@ module.exports = {
           },
           {
             buttonId: `#ytmp3 ${videoUrl}`,
-            buttonText: { displayText: '.ytmp3'+ videoUrl },
+            buttonText: { displayText: '.ytmp3 '+ videoUrl },
             type: 1
           }
         ],
