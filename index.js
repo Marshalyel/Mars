@@ -24,6 +24,9 @@ try {
 // Global flag untuk self mode (default: off)
 let selfMode = false;
 
+// Cache untuk ID pesan yang sudah diproses agar tidak terjadi duplikasi
+const processedMessages = new Set();
+
 /**
  * Fungsi helper untuk meminta input dari terminal.
  */
@@ -173,10 +176,15 @@ function getMessageText(m) {
   if (m.message.extendedTextMessage && m.message.extendedTextMessage.text) return m.message.extendedTextMessage.text;
   if (m.message.imageMessage && m.message.imageMessage.caption) return m.message.imageMessage.caption;
   if (m.message.videoMessage && m.message.videoMessage.caption) return m.message.videoMessage.caption;
-  if (m.message.buttonsResponseMessage && m.message.buttonsResponseMessage.selectedDisplayText) return m.message.buttonsResponseMessage.selectedDisplayText;
-  if (m.message.buttonsResponseMessage && m.message.buttonsResponseMessage.selectedButtonId) return m.message.buttonsResponseMessage.selectedButtonId;
-  if (m.message.listResponseMessage && m.message.listResponseMessage.singleSelectReply && m.message.listResponseMessage.singleSelectReply.selectedRowId) return m.message.listResponseMessage.singleSelectReply.selectedRowId;
-  if (m.message.templateButtonReplyMessage && m.message.templateButtonReplyMessage.selectedId) return m.message.templateButtonReplyMessage.selectedId;
+  if (m.message.buttonsResponseMessage) {
+    return m.message.buttonsResponseMessage.selectedDisplayText || m.message.buttonsResponseMessage.selectedButtonId || '';
+  }
+  if (m.message.listResponseMessage && m.message.listResponseMessage.singleSelectReply && m.message.listResponseMessage.singleSelectReply.selectedRowId) {
+    return m.message.listResponseMessage.singleSelectReply.selectedRowId;
+  }
+  if (m.message.templateButtonReplyMessage && m.message.templateButtonReplyMessage.selectedId) {
+    return m.message.templateButtonReplyMessage.selectedId;
+  }
   return m.text || '';
 }
 
@@ -262,7 +270,7 @@ async function updateFile(sock, message, fileName, remoteUrl) {
 }
 
 /**
- * Fungsi updatePlugins: mengambil daftar file plugin dari GitHub menggunakan API dan menimpanya ke folder plugins.
+ * Fungsi updatePlugins: mengambil daftar file plugin dari GitHub dan menimpanya ke folder plugins.
  */
 async function updatePlugins(sock, message) {
   const pluginsPath = path.join(__dirname, 'plugins');
@@ -342,47 +350,39 @@ async function startSock() {
         console.log(chalk.green("Koneksi berhasil terbuka"));
       }
     });
-    sock.ev.on('messages.upsert', async m => {
+    sock.ev.on('messages.upsert', async (m) => {
       try {
-        const message = m.messages[0];
-        if (!message || !message.key || !message.message) return;
-        const sender = message.key.remoteJid;
-        let text = getMessageText(message).trim();
-        if (!text) {
-          console.log("Pesan tanpa teks diterima, tidak diproses.");
-          return;
-        }
-        
-        // Proses perintah !self on/off
-        if (text.startsWith("!self")) {
-          const parts = text.split(" ");
-          if (parts[1] && parts[1].toLowerCase() === "on") {
-            selfMode = true;
-            await sock.sendMessage(sender, { text: "Self mode aktif. Hanya pesan dari bot yang akan diproses." });
-          } else if (parts[1] && parts[1].toLowerCase() === "off") {
-            selfMode = false;
-            await sock.sendMessage(sender, { text: "Self mode nonaktif. Semua pesan akan diproses." });
-          } else {
-            await sock.sendMessage(sender, { text: "Penggunaan: !self on atau !self off" });
+        // Proses setiap pesan di dalam array m.messages
+        for (const message of m.messages) {
+          // Abaikan pesan jika tidak memiliki message atau berasal dari bot sendiri
+          if (!message || !message.key || !message.message || message.key.fromMe) continue;
+          // Cek apakah pesan sudah diproses menggunakan ID pesan
+          const messageId = message.key.id;
+          if (processedMessages.has(messageId)) {
+            console.log(`Pesan dengan ID ${messageId} sudah diproses.`);
+            continue;
           }
-          return;
+          // Tandai pesan sebagai telah diproses
+          processedMessages.add(messageId);
+          // Ekstrak teks pesan menggunakan fungsi helper
+          let text = getMessageText(message).trim();
+          if (!text) {
+            console.log("Pesan tanpa teks diterima, tidak diproses.");
+            continue;
+          }
+          console.log(chalk.blue('-------------------------------------------------'));
+          const timestamp = new Date().toLocaleString();
+          console.log(chalk.yellow(`Waktu   : ${timestamp}`));
+          console.log(chalk.magenta(`Pengirim: ${message.key.remoteJid}`));
+          console.log(chalk.green(`Pesan   : ${text}`));
+          console.log(chalk.blue('-------------------------------------------------'));
+          
+          // Tandai pesan jika mengandung gambar
+          if (message.message.imageMessage) {
+            message.containsImage = true;
+          }
+          require('./case').handleCase(sock, message);
         }
-        if (selfMode && !message.key.fromMe) {
-          console.log("Self mode aktif, mengabaikan pesan dari luar.");
-          return;
-        }
-        console.log(chalk.blue('-------------------------------------------------'));
-        const timestamp = new Date().toLocaleString();
-        console.log(chalk.yellow(`Waktu   : ${timestamp}`));
-        console.log(chalk.magenta(`Pengirim: ${sender}`));
-        console.log(chalk.green(`Pesan   : ${text}`));
-        console.log(chalk.blue('-------------------------------------------------'));
-        
-        // Tandai pesan jika mengandung gambar
-        if (message.message.imageMessage) {
-          message.containsImage = true;
-        }
-        require('./case').handleCase(sock, message);
       } catch (error) {
         console.error(chalk.red("Error processing message:"), error);
       }
