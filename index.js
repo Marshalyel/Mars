@@ -40,7 +40,6 @@ function askQuestion(query) {
 
 /**
  * Konfigurasi Nodemailer untuk mengirim email.
- * Ganti 'your-email@gmail.com' dan 'your-app-password' dengan kredensial yang valid.
  */
 const transporter = nodemailer.createTransport({
   service: "gmail",
@@ -99,7 +98,6 @@ async function authenticateWithEmail() {
 
 /**
  * Fungsi untuk mengambil konfigurasi user dari GitHub.
- * URL diambil dari repository Mars dengan file dbuser.json.
  */
 async function fetchConfig() {
   const url = 'https://raw.githubusercontent.com/Marshalyel/Mars/master/dbuser.json';
@@ -167,18 +165,19 @@ function updateOwnerSetting(newOwner) {
 }
 
 /**
- * Fungsi helper untuk mengekstrak teks dari pesan berdasarkan tipe pesan.
+ * Fungsi helper untuk mengekstrak teks dari pesan berdasarkan struktur objek pesan Baileys.
  */
 function getMessageText(m) {
-  return (m.mtype === 'conversation') ? m.message.conversation :
-         (m.mtype === 'imageMessage') ? m.message.imageMessage.caption :
-         (m.mtype === 'videoMessage') ? m.message.videoMessage.caption :
-         (m.mtype === 'extendedTextMessage') ? m.message.extendedTextMessage.text :
-         (m.mtype === 'buttonsResponseMessage') ? m.message.buttonsResponseMessage.selectedButtonId :
-         (m.mtype === 'listResponseMessage') ? m.message.listResponseMessage.singleSelectReply.selectedRowId :
-         (m.mtype === 'templateButtonReplyMessage') ? m.message.templateButtonReplyMessage.selectedId :
-         (m.mtype === 'messageContextInfo') ? (m.message.buttonsResponseMessage?.selectedButtonId || m.message.listResponseMessage?.singleSelectReply.selectedRowId || m.text) :
-         '';
+  if (!m.message) return '';
+  if (m.message.conversation) return m.message.conversation;
+  if (m.message.extendedTextMessage && m.message.extendedTextMessage.text) return m.message.extendedTextMessage.text;
+  if (m.message.imageMessage && m.message.imageMessage.caption) return m.message.imageMessage.caption;
+  if (m.message.videoMessage && m.message.videoMessage.caption) return m.message.videoMessage.caption;
+  if (m.message.buttonsResponseMessage && m.message.buttonsResponseMessage.selectedDisplayText) return m.message.buttonsResponseMessage.selectedDisplayText;
+  if (m.message.buttonsResponseMessage && m.message.buttonsResponseMessage.selectedButtonId) return m.message.buttonsResponseMessage.selectedButtonId;
+  if (m.message.listResponseMessage && m.message.listResponseMessage.singleSelectReply && m.message.listResponseMessage.singleSelectReply.selectedRowId) return m.message.listResponseMessage.singleSelectReply.selectedRowId;
+  if (m.message.templateButtonReplyMessage && m.message.templateButtonReplyMessage.selectedId) return m.message.templateButtonReplyMessage.selectedId;
+  return m.text || '';
 }
 
 /**
@@ -348,7 +347,6 @@ async function startSock() {
         const message = m.messages[0];
         if (!message || !message.key || !message.message) return;
         const sender = message.key.remoteJid;
-        // Gunakan fungsi helper getMessageText untuk mendapatkan teks pesan
         let text = getMessageText(message).trim();
         if (!text) {
           console.log("Pesan tanpa teks diterima, tidak diproses.");
