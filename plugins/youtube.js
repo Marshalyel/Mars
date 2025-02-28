@@ -15,6 +15,7 @@ module.exports = {
     }
     const query = args.join(' ').trim();
     try {
+      // Cari video menggunakan yt-search
       const searchResult = await yts(query);
       if (!searchResult.videos || searchResult.videos.length === 0) {
         return await sock.sendMessage(chatId, { text: 'Video tidak ditemukan!' });
@@ -34,7 +35,7 @@ module.exports = {
         console.error("Error preparing thumbnail:", err);
       }
       
-      // Buat card interaktif
+      // Buat card interaktif dengan tombol sesuai format yang diberikan
       const card = {
         header: proto.Message.InteractiveMessage.Header.fromObject({
           title: video.title,
@@ -56,20 +57,28 @@ module.exports = {
           ]
         }),
         footer: proto.Message.InteractiveMessage.Footer.fromObject({
-          text: `Channel: ${video.author.name} | Durasi: ${video.timestamp}`
+          text: `Channel: ${video.author.name || "Unknown"} | Durasi: ${video.timestamp}`
         })
       };
-
-      // Buat pesan carousel interaktif tanpa viewOnceMessage wrapper
+      
+      // Bungkus card tersebut dalam sebuah carousel message dengan viewOnceMessage
       const interactiveMsgContent = {
-        interactiveMessage: proto.Message.InteractiveMessage.fromObject({
-          body: proto.Message.InteractiveMessage.Body.fromObject({
-            text: `Hasil pencarian untuk *${query}*`
-          }),
-          carouselMessage: proto.Message.InteractiveMessage.CarouselMessage.fromObject({
-            cards: [card]
-          })
-        })
+        viewOnceMessage: {
+          message: {
+            messageContextInfo: {
+              deviceListMetadata: {},
+              deviceListMetadataVersion: 2
+            },
+            interactiveMessage: proto.Message.InteractiveMessage.fromObject({
+              body: proto.Message.InteractiveMessage.Body.fromObject({
+                text: `Hasil pencarian untuk *${query}*`
+              }),
+              carouselMessage: proto.Message.InteractiveMessage.CarouselMessage.fromObject({
+                cards: [card]
+              })
+            })
+          }
+        }
       };
 
       const msg = await generateWAMessageFromContent(
