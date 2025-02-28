@@ -8,19 +8,21 @@ module.exports = {
   name: 'azan',
   description: 'Menampilkan jadwal azan dan petunjuk penggunaan fitur azan dengan tombol interaktif.',
   run: async (sock, m, args) => {
+    // Gunakan m.key.remoteJid sebagai target chat
+    const chatId = m.key.remoteJid;
     // Pastikan m.prefix dan m.command ada; jika tidak, set default
     m.prefix = m.prefix || '!';
     m.command = m.command || 'azan';
 
-    // Konfigurasi (misal, nama bot)
+    // Konfigurasi nama bot
     const config = { name: "Elaina Bot" };
 
-    // Siapkan media header (opsional) – gunakan file lokal jika tersedia
-    let media = {};
+    // Siapkan media header (opsional)
+    let headerMedia = {};
     try {
-      const imagePath = path.join(__dirname, 'azan.jpg'); // pastikan file ini ada atau ganti dengan URL
+      const imagePath = path.join(__dirname, 'azan.jpg'); // Pastikan file ini ada atau ganti dengan URL
       if (fs.existsSync(imagePath)) {
-        media = await prepareWAMessageMedia(
+        headerMedia = await prepareWAMessageMedia(
           { image: { url: imagePath } },
           { upload: sock.waUploadToServer.bind(sock) }
         );
@@ -29,7 +31,18 @@ module.exports = {
       console.error("Error preparing media for azan:", err);
     }
 
-    // Bangun pesan interaktif dengan tombol menggunakan kode yang Anda berikan
+    // Buat header interaktif jika media tersedia
+    let headerObj = {};
+    if (headerMedia && headerMedia.message && headerMedia.message.imageMessage) {
+      headerObj = proto.Message.InteractiveMessage.Header.fromObject({
+        title: "",
+        subtitle: "Elaina",
+        hasMediaAttachment: true,
+        ...headerMedia.message.imageMessage,
+      });
+    }
+
+    // Bangun pesan interaktif dengan tombol
     const send = {
       text: `*– 乂 Cara Penggunaan*\n> *\`0\`* Untuk mematikan fitur ${m.prefix + m.command} off\n> *\`1\`* Untuk menghidupkan fitur ${m.prefix + m.command} on`,
       footer: config.name,
@@ -47,10 +60,13 @@ module.exports = {
       ],
       viewOnce: true,
       headerType: 6,
-      // Jika media tersedia, sertakan pada header
-      header: media ? media : {}
+      header: Object.keys(headerObj).length ? headerObj : {}
     };
 
-    await sock.sendMessage(m.chat, send, { quoted: m });
+    try {
+      await sock.sendMessage(chatId, send, { quoted: m });
+    } catch (error) {
+      console.error("Error sending azan message:", error);
+    }
   }
 };
