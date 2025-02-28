@@ -35,23 +35,13 @@ module.exports = {
         // Tombol interaktif yang mengirim perintah langsung ke bot
         const buttons = [
           {
-            buttonId: `#batal ${video.videoId}`,
-            buttonText: { displayText: "Batal" },
+            buttonId: `.ytmp3 ${video.url}`,
+            buttonText: { displayText: "🎵 Download MP3" },
             type: 1
           },
           {
-            buttonId: `#status ${video.videoId}`,
-            buttonText: { displayText: "Status" },
-            type: 1
-          },
-          {
-            buttonId: `ytmp3 ${video.url}`,
-            buttonText: { displayText: "Download MP3" },
-            type: 1
-          },
-          {
-            buttonId: `ytmp4 ${video.url}`,
-            buttonText: { displayText: "Download MP4" },
+            buttonId: `.ytmp4 ${video.url}`,
+            buttonText: { displayText: "📺 Download MP4" },
             type: 1
           }
         ];
@@ -68,10 +58,8 @@ module.exports = {
           footer: proto.Message.InteractiveMessage.Footer.fromObject({
             text: `👤 ${video.author.name || "Unknown"} | 👁 ${video.views} | ⏳ ${video.timestamp}`
           }),
-          interactiveMessage: proto.Message.InteractiveMessage.fromObject({
-            nativeFlowMessage: proto.Message.InteractiveMessage.NativeFlowMessage.fromObject({
-              buttons: buttons
-            })
+          nativeFlowMessage: proto.Message.InteractiveMessage.NativeFlowMessage.fromObject({
+            buttons: buttons
           })
         };
         cards.push(card);
