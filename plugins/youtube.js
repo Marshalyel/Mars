@@ -9,24 +9,24 @@ module.exports = {
     const chatId = m.key.remoteJid;
 
     if (!args.length) {
-      return await sock.sendMessage(chatId, { text: 'Masukkan query pencarian!\nContoh: `!youtube lagu terbaru`' });
+      return await sock.sendMessage(chatId, { text: 'Masukkan kata kunci pencarian!\nContoh: `!youtube lagu terbaru`' });
     }
 
     const query = args.join(' ').trim();
     try {
-      // Cari video YouTube
+      // Mencari video YouTube
       const searchResult = await yts(query);
       if (!searchResult.videos || searchResult.videos.length === 0) {
         return await sock.sendMessage(chatId, { text: 'Video tidak ditemukan!' });
       }
 
-      const videos = searchResult.videos.slice(0, 5); // Simpan hanya 5 video
+      const videos = searchResult.videos.slice(0, 5); // Simpan hanya 5 video pertama
       youtubeCache[chatId] = { videos, index: 0 }; // Simpan hasil pencarian & posisi index pertama
 
       await sendVideo(sock, chatId, m, videos, 0);
 
     } catch (error) {
-      console.error("Error dalam pencarian YouTube:", error);
+      console.error("Error saat mencari YouTube:", error);
       await sock.sendMessage(chatId, { text: 'Gagal memproses pencarian YouTube.' }, { quoted: m });
     }
   }
@@ -37,12 +37,13 @@ async function sendVideo(sock, chatId, m, videos, index) {
   if (index < 0 || index >= videos.length) return;
 
   const video = videos[index];
+  const videoUrl = video.url;
 
-  const messageText = `📌 *${video.title}*\n📺 Channel: ${video.author.name || "Unknown"}\n⏳ Durasi: ${video.timestamp}\n👁 Views: ${video.views}\n🔗 Link: ${video.url}`;
+  const messageText = `📌 *${video.title}*\n📺 Channel: ${video.author.name || "Unknown"}\n⏳ Durasi: ${video.timestamp}\n👁 Views: ${video.views}\n🔗 Link: ${videoUrl}`;
 
   const buttons = [
-    { buttonId: `.ytmp3 ${video.url}`, buttonText: { displayText: '🎵 Download MP3' }, type: 1 },
-    { buttonId: `.ytmp4 ${video.url}`, buttonText: { displayText: '🎥 Download MP4' }, type: 1 }
+    { buttonId: `.ytmp3 ${videoUrl}`, buttonText: { displayText: '🎵 Download MP3' }, type: 1 },
+    { buttonId: `.ytmp4 ${videoUrl}`, buttonText: { displayText: '🎥 Download MP4' }, type: 1 }
   ];
 
   if (index > 0) {
@@ -67,7 +68,7 @@ module.exports.handleButtons = async (sock, m) => {
   const chatId = m.key.remoteJid;
   const userCache = youtubeCache[chatId];
 
-  if (!userCache) return; // Tidak ada data pencarian sebelumnya
+  if (!userCache) return; // Tidak ada pencarian sebelumnya
 
   if (m.message.buttonsResponseMessage) {
     const selectedButton = m.message.buttonsResponseMessage.selectedButtonId;
@@ -77,7 +78,7 @@ module.exports.handleButtons = async (sock, m) => {
     } else if (selectedButton === '.prev') {
       userCache.index -= 1;
     } else {
-      return; // Jika bukan Next/Back, biarkan handler lain yang menangani
+      return; // Jika bukan Next/Back, biarkan handler lain menangani
     }
 
     await sendVideo(sock, chatId, m, userCache.videos, userCache.index);
