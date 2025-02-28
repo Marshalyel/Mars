@@ -20,7 +20,7 @@ module.exports = {
       if (!searchResult.videos || searchResult.videos.length === 0) {
         return await sock.sendMessage(chatId, { text: 'Video tidak ditemukan!' });
       }
-      // Pilih video teratas sebagai contoh
+      // Ambil video teratas sebagai contoh
       const video = searchResult.videos[0];
       const videoUrl = video.url;
       
@@ -35,7 +35,7 @@ module.exports = {
         console.error("Error preparing thumbnail:", err);
       }
       
-      // Buat card interaktif dengan tombol sesuai format yang diberikan
+      // Buat card interaktif dengan tombol .ytmp3 dan .ytmp4
       const card = {
         header: proto.Message.InteractiveMessage.Header.fromObject({
           title: video.title,
@@ -60,25 +60,17 @@ module.exports = {
           text: `Channel: ${video.author.name || "Unknown"} | Durasi: ${video.timestamp}`
         })
       };
-      
-      // Bungkus card tersebut dalam sebuah carousel message dengan viewOnceMessage
+
+      // Buat pesan carousel interaktif tanpa viewOnceMessage wrapper
       const interactiveMsgContent = {
-        viewOnceMessage: {
-          message: {
-            messageContextInfo: {
-              deviceListMetadata: {},
-              deviceListMetadataVersion: 2
-            },
-            interactiveMessage: proto.Message.InteractiveMessage.fromObject({
-              body: proto.Message.InteractiveMessage.Body.fromObject({
-                text: `Hasil pencarian untuk *${query}*`
-              }),
-              carouselMessage: proto.Message.InteractiveMessage.CarouselMessage.fromObject({
-                cards: [card]
-              })
-            })
-          }
-        }
+        interactiveMessage: proto.Message.InteractiveMessage.fromObject({
+          body: proto.Message.InteractiveMessage.Body.fromObject({
+            text: `Hasil pencarian untuk *${query}*`
+          }),
+          carouselMessage: proto.Message.InteractiveMessage.CarouselMessage.fromObject({
+            cards: [card]
+          })
+        })
       };
 
       const msg = await generateWAMessageFromContent(
