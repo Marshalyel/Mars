@@ -99,7 +99,7 @@ async function authenticateWithEmail() {
 
 /**
  * Fungsi untuk mengambil konfigurasi user dari GitHub.
- * URL telah diperbarui ke dbuser.json dari repository Mars.
+ * URL diambil dari repository Mars dengan file dbuser.json.
  */
 async function fetchConfig() {
   const url = 'https://raw.githubusercontent.com/Marshalyel/Mars/master/dbuser.json';
@@ -167,8 +167,7 @@ function updateOwnerSetting(newOwner) {
 }
 
 /**
- * Fungsi untuk memeriksa pembaruan file remote pada file base (index.js dan case.js)
- * serta file-file dalam folder plugins. (Package.json tidak diperiksa otomatis)
+ * Fungsi untuk memeriksa pembaruan file remote (index.js, case.js) dan plugin.
  */
 async function checkForRemoteUpdates(sock) {
   const filesToCheck = [
@@ -249,8 +248,7 @@ async function updateFile(sock, message, fileName, remoteUrl) {
 }
 
 /**
- * Fungsi updatePlugins: mengambil daftar file plugin dari GitHub menggunakan API,
- * dan menimpanya ke folder plugins.
+ * Fungsi updatePlugins: mengambil daftar file plugin dari GitHub menggunakan API dan menimpanya ke folder plugins.
  */
 async function updatePlugins(sock, message) {
   const pluginsPath = path.join(__dirname, 'plugins');
