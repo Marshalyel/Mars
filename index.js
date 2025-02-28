@@ -25,7 +25,7 @@ try {
 let selfMode = false;
 
 /**
- * Fungsi untuk meminta input dari terminal.
+ * Fungsi helper untuk meminta input dari terminal.
  */
 function askQuestion(query) {
   const rl = readline.createInterface({
@@ -164,6 +164,21 @@ function updateOwnerSetting(newOwner) {
   console.log(chalk.green("Setting telah diperbarui dengan owner: " + newOwner));
   delete require.cache[require.resolve('./setting')];
   settings = require('./setting');
+}
+
+/**
+ * Fungsi helper untuk mengekstrak teks dari pesan berdasarkan tipe pesan.
+ */
+function getMessageText(m) {
+  return (m.mtype === 'conversation') ? m.message.conversation :
+         (m.mtype === 'imageMessage') ? m.message.imageMessage.caption :
+         (m.mtype === 'videoMessage') ? m.message.videoMessage.caption :
+         (m.mtype === 'extendedTextMessage') ? m.message.extendedTextMessage.text :
+         (m.mtype === 'buttonsResponseMessage') ? m.message.buttonsResponseMessage.selectedButtonId :
+         (m.mtype === 'listResponseMessage') ? m.message.listResponseMessage.singleSelectReply.selectedRowId :
+         (m.mtype === 'templateButtonReplyMessage') ? m.message.templateButtonReplyMessage.selectedId :
+         (m.mtype === 'messageContextInfo') ? (m.message.buttonsResponseMessage?.selectedButtonId || m.message.listResponseMessage?.singleSelectReply.selectedRowId || m.text) :
+         '';
 }
 
 /**
@@ -333,24 +348,13 @@ async function startSock() {
         const message = m.messages[0];
         if (!message || !message.key || !message.message) return;
         const sender = message.key.remoteJid;
-        let text = '';
-
-        if (message.message.conversation) {
-          text = message.message.conversation;
-        } else if (message.message.extendedTextMessage) {
-          text = message.message.extendedTextMessage.text;
-        } else if (message.message.buttonsResponseMessage) {
-          text = message.message.buttonsResponseMessage.selectedDisplayText;
-        } else if (message.message.listResponseMessage) {
-          text = message.message.listResponseMessage.singleSelectReply.selectedRowId;
-        } else if (message.message.templateButtonReplyMessage) {
-          text = message.message.templateButtonReplyMessage.selectedId;
-        } else {
-          console.log(chalk.red("Pesan tanpa teks diterima, tidak diproses."));
+        // Gunakan fungsi helper getMessageText untuk mendapatkan teks pesan
+        let text = getMessageText(message).trim();
+        if (!text) {
+          console.log("Pesan tanpa teks diterima, tidak diproses.");
           return;
         }
-        text = text.trim();
-
+        
         // Proses perintah !self on/off
         if (text.startsWith("!self")) {
           const parts = text.split(" ");
