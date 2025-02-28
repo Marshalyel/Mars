@@ -1,113 +1,52 @@
 // plugins/YouTube.js
 
-const axios = require('axios');
 const yts = require('yt-search');
-const { proto, generateWAMessageFromContent, prepareWAMessageMedia } = require('@whiskeysockets/baileys');
-const fs = require('fs');
 
 module.exports = {
   name: 'youtube',
-  description: 'Mencari video YouTube dan mengirim hasil dalam bentuk carousel dengan list menu interaktif untuk aksi (Salin Link, Download MP3/MP4)',
-  run: async (sock, message, args) => {
-    const chatId = message.key.remoteJid;
+  description: 'Mencari video YouTube dan mengirimkan hasil dengan button interaktif',
+  run: async (sock, m, args) => {
+    const chatId = m.key.remoteJid;
     if (!args.length) {
       return await sock.sendMessage(chatId, { text: 'Masukkan query pencarian, misal: !youtube tutorial javascript' });
     }
-    
-    const query = args.join(' ').trim();
-    
+    const query = args.join(' ');
     try {
-      // Cari video dengan yt-search
       const searchResult = await yts(query);
-      const videos = searchResult.videos.slice(0, 7);
-      if (!videos.length) {
+      if (!searchResult.videos || searchResult.videos.length === 0) {
         return await sock.sendMessage(chatId, { text: 'Video tidak ditemukan!' });
       }
+      // Pilih video top result
+      const video = searchResult.videos[0];
+      const videoUrl = video.url;
       
-      // Buat pesan loading (opsional)
-      await sock.sendMessage(chatId, { text: "*Loading* ⌛\nTunggu beberapa detik..." });
+      // Konfigurasi bot (nama bot)
+      const config = { name: "Elaina Bot" };
       
-      // Buat array card untuk carousel
-      let cards = [];
-      for (const video of videos) {
-        let mediaMsg = {};
-        try {
-          // Siapkan thumbnail; Anda bisa mengganti URL thumbnail atau menggunakan file lokal
-          mediaMsg = await prepareWAMessageMedia(
-            { image: { url: video.thumbnail } },
-            { upload: sock.waUploadToServer.bind(sock) }
-          );
-        } catch (err) {
-          console.error("Error preparing thumbnail:", err);
-        }
-        
-        // Bangun struktur list menu untuk tombol
-        const listMenu = {
-          title: "Pilih Aksi",
-          sections: [
-            {
-              title: "Aksi Video",
-              rows: [
-                { id: `#copy ${video.url}`, title: "Salin Link", description: "Salin URL video YouTube" },
-                { id: `#ytmp3 ${video.url}`, title: "Download MP3", description: "Download audio MP3" },
-                { id: `#ytmp4 ${video.url}`, title: "Download MP4", description: "Download video MP4" }
-              ]
-            }
-          ]
-        };
-        
-        // Buat card interaktif dengan tombol list menu
-        const card = {
-          header: proto.Message.InteractiveMessage.Header.fromObject({
-            title: video.title,
-            hasMediaAttachment: true,
-            ...mediaMsg
-          }),
-          nativeFlowMessage: proto.Message.InteractiveMessage.NativeFlowMessage.fromObject({
-            buttons: [
-              {
-                name: "single_select",
-                buttonParamsJson: JSON.stringify(listMenu)
-              }
-            ]
-          }),
-          footer: proto.Message.InteractiveMessage.Footer.fromObject({
-            text: `Channel: ${video.author.name} | Durasi: ${video.timestamp}`
-          })
-        };
-        cards.push(card);
-      }
-      
-      // Buat pesan carousel interaktif
-      const interactiveMsgContent = {
-        viewOnceMessage: {
-          message: {
-            messageContextInfo: {
-              deviceListMetadata: {},
-              deviceListMetadataVersion: 2
-            },
-            interactiveMessage: proto.Message.InteractiveMessage.fromObject({
-              body: proto.Message.InteractiveMessage.Body.fromObject({
-                text: `Hasil pencarian untuk *${query}*`
-              }),
-              carouselMessage: proto.Message.InteractiveMessage.CarouselMessage.fromObject({
-                cards: cards
-              })
-            })
+      // Bangun pesan interaktif menggunakan button sesuai contoh
+      const send = {
+        text: `*– 乂 YouTube Result*\nTitle: ${video.title}\nChannel: ${video.author.name}\nDurasi: ${video.timestamp}`,
+        footer: config.name,
+        buttons: [
+          {
+            buttonId: `#copy ${videoUrl}`,
+            buttonText: { displayText: 'Salin Link' },
+            type: 1
+          },
+          {
+            buttonId: `#ytmp3 ${videoUrl}`,
+            buttonText: { displayText: 'Download MP3' },
+            type: 1
           }
-        }
+        ],
+        viewOnce: true,
+        headerType: 6
       };
-
-      const msg = await generateWAMessageFromContent(
-        chatId,
-        interactiveMsgContent,
-        { userJid: chatId, quoted: message }
-      );
-      await sock.relayMessage(chatId, msg.message, { messageId: msg.key.id });
       
+      await sock.sendMessage(chatId, send, { quoted: m });
     } catch (error) {
-      console.error("Error during YouTube processing:", error);
-      return await sock.sendMessage(chatId, { text: 'Gagal memproses YouTube.' });
+      console.error("Error dalam pencarian YouTube:", error);
+      await sock.sendMessage(chatId, { text: 'Gagal memproses pencarian YouTube.' }, { quoted: m });
     }
   }
 };
