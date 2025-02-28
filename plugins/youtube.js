@@ -1,5 +1,7 @@
 const yts = require('yt-search');
 
+let youtubeCache = {}; // Cache untuk menyimpan hasil pencarian per pengguna
+
 module.exports = {
   name: 'youtube',
   description: 'Mencari video YouTube dan mengirimkan hasil dengan tombol untuk download MP3 dan MP4',
@@ -11,9 +13,6 @@ module.exports = {
     }
 
     const query = args.join(' ').trim();
-    let page = 1; // Halaman pertama
-    const resultsPerPage = 5;
-
     try {
       // Cari video YouTube
       const searchResult = await yts(query);
@@ -21,63 +20,66 @@ module.exports = {
         return await sock.sendMessage(chatId, { text: 'Video tidak ditemukan!' });
       }
 
-      let totalVideos = searchResult.videos.length;
-      let totalPages = Math.ceil(totalVideos / resultsPerPage);
-      let startIndex = (page - 1) * resultsPerPage;
-      let endIndex = startIndex + resultsPerPage;
-      let videos = searchResult.videos.slice(startIndex, endIndex);
+      const videos = searchResult.videos.slice(0, 5); // Simpan hanya 5 video
+      youtubeCache[chatId] = { videos, index: 0 }; // Simpan hasil pencarian & posisi index pertama
 
-      let messageText = `🔎 Hasil pencarian untuk *${query}* (Halaman ${page}/${totalPages}):\n\n`;
-
-      for (let i = 0; i < videos.length; i++) {
-        const video = videos[i];
-        messageText += `📌 *${i + 1}. ${video.title}*\n`;
-        messageText += `📺 Channel: ${video.author.name || "Unknown"}\n`;
-        messageText += `⏳ Durasi: ${video.timestamp}\n`;
-        messageText += `👁 Views: ${video.views}\n`;
-        messageText += `🔗 Link: ${video.url}\n\n`;
-      }
-
-      let buttons = [
-        {
-          buttonId: `.ytmp3 ${videos[0].url}`,
-          buttonText: { displayText: '🎵 Download MP3' },
-          type: 1
-        },
-        {
-          buttonId: `.ytmp4 ${videos[0].url}`,
-          buttonText: { displayText: '🎥 Download MP4' },
-          type: 1
-        }
-      ];
-
-      if (page > 1) {
-        buttons.push({
-          buttonId: `.ytback ${page - 1} ${query}`,
-          buttonText: { displayText: '⬅ Back' },
-          type: 1
-        });
-      }
-
-      if (endIndex < totalVideos) {
-        buttons.push({
-          buttonId: `.ytnext ${page + 1} ${query}`,
-          buttonText: { displayText: 'Next ➡' },
-          type: 1
-        });
-      }
-
-      await sock.sendMessage(chatId, {
-        text: messageText,
-        footer: 'Gunakan tombol di bawah untuk download atau navigasi:',
-        buttons: buttons,
-        headerType: 1,
-        viewOnce: true
-      }, { quoted: m });
+      await sendVideo(sock, chatId, m, videos, 0);
 
     } catch (error) {
       console.error("Error dalam pencarian YouTube:", error);
       await sock.sendMessage(chatId, { text: 'Gagal memproses pencarian YouTube.' }, { quoted: m });
     }
+  }
+};
+
+// Fungsi untuk mengirim video dengan tombol Next & Back
+async function sendVideo(sock, chatId, m, videos, index) {
+  if (index < 0 || index >= videos.length) return;
+
+  const video = videos[index];
+
+  const messageText = `📌 *${video.title}*\n📺 Channel: ${video.author.name || "Unknown"}\n⏳ Durasi: ${video.timestamp}\n👁 Views: ${video.views}\n🔗 Link: ${video.url}`;
+
+  const buttons = [
+    { buttonId: `.ytmp3 ${video.url}`, buttonText: { displayText: '🎵 Download MP3' }, type: 1 },
+    { buttonId: `.ytmp4 ${video.url}`, buttonText: { displayText: '🎥 Download MP4' }, type: 1 }
+  ];
+
+  if (index > 0) {
+    buttons.push({ buttonId: `.prev`, buttonText: { displayText: '⬅️ Back' }, type: 1 });
+  }
+
+  if (index < videos.length - 1) {
+    buttons.push({ buttonId: `.next`, buttonText: { displayText: '➡️ Next' }, type: 1 });
+  }
+
+  await sock.sendMessage(chatId, {
+    text: messageText,
+    footer: `Video ${index + 1} dari ${videos.length}`,
+    buttons: buttons,
+    headerType: 1,
+    viewOnce: true
+  }, { quoted: m });
+}
+
+// Handler untuk tombol Next & Back
+module.exports.handleButtons = async (sock, m) => {
+  const chatId = m.key.remoteJid;
+  const userCache = youtubeCache[chatId];
+
+  if (!userCache) return; // Tidak ada data pencarian sebelumnya
+
+  if (m.message.buttonsResponseMessage) {
+    const selectedButton = m.message.buttonsResponseMessage.selectedButtonId;
+
+    if (selectedButton === '.next') {
+      userCache.index += 1;
+    } else if (selectedButton === '.prev') {
+      userCache.index -= 1;
+    } else {
+      return; // Jika bukan Next/Back, biarkan handler lain yang menangani
+    }
+
+    await sendVideo(sock, chatId, m, userCache.videos, userCache.index);
   }
 };
