@@ -42,16 +42,16 @@ async function sendVideo(sock, chatId, m, videos, index) {
   const messageText = `📌 *${video.title}*\n📺 Channel: ${video.author.name || "Unknown"}\n⏳ Durasi: ${video.timestamp}\n👁 Views: ${video.views}\n🔗 Link: ${videoUrl}`;
 
   const buttons = [
-    { buttonId: `.ytmp3 ${videoUrl}`, buttonText: { displayText: '🎵 Download MP3' }, type: 1 },
-    { buttonId: `.ytmp4 ${videoUrl}`, buttonText: { displayText: '🎥 Download MP4' }, type: 1 }
+    { buttonId: `.ytmp3 ${videoUrl}`, buttonText: { displayText: `.ytmp3 ${videoUrl}` }, type: 1 },
+    { buttonId: `.ytmp4 ${videoUrl}`, buttonText: { displayText: `.ytmp4 ${videoUrl}` }, type: 1 }
   ];
 
   if (index > 0) {
-    buttons.push({ buttonId: `.prev`, buttonText: { displayText: '⬅️ Back' }, type: 1 });
+    buttons.push({ buttonId: `.prev`, buttonText: { displayText: `.prev` }, type: 1 });
   }
 
   if (index < videos.length - 1) {
-    buttons.push({ buttonId: `.next`, buttonText: { displayText: '➡️ Next' }, type: 1 });
+    buttons.push({ buttonId: `.next`, buttonText: { displayText: `.next` }, type: 1 });
   }
 
   await sock.sendMessage(chatId, {
