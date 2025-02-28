@@ -22,7 +22,7 @@ module.exports = {
       // Pilih video teratas sebagai contoh
       const video = searchResult.videos[0];
       const videoUrl = video.url;
-
+      
       // Siapkan thumbnail sebagai media header
       let mediaMsg = {};
       try {
@@ -34,7 +34,7 @@ module.exports = {
         console.error("Error preparing thumbnail:", err);
       }
       
-      // Buat card interaktif dengan header, body, footer, dan tombol
+      // Buat card interaktif
       const card = {
         header: proto.Message.InteractiveMessage.Header.fromObject({
           title: video.title,
@@ -60,24 +60,16 @@ module.exports = {
         })
       };
 
-      // Buat pesan carousel interaktif dengan satu card
+      // Buat pesan carousel interaktif tanpa viewOnceMessage wrapper
       const interactiveMsgContent = {
-        viewOnceMessage: {
-          message: {
-            messageContextInfo: {
-              deviceListMetadata: {},
-              deviceListMetadataVersion: 2
-            },
-            interactiveMessage: proto.Message.InteractiveMessage.fromObject({
-              body: proto.Message.InteractiveMessage.Body.fromObject({
-                text: `Hasil pencarian untuk *${query}*`
-              }),
-              carouselMessage: proto.Message.InteractiveMessage.CarouselMessage.fromObject({
-                cards: [card]
-              })
-            })
-          }
-        }
+        interactiveMessage: proto.Message.InteractiveMessage.fromObject({
+          body: proto.Message.InteractiveMessage.Body.fromObject({
+            text: `Hasil pencarian untuk *${query}*`
+          }),
+          carouselMessage: proto.Message.InteractiveMessage.CarouselMessage.fromObject({
+            cards: [card]
+          })
+        })
       };
 
       const msg = await generateWAMessageFromContent(
