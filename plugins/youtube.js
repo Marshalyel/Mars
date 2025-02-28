@@ -3,13 +3,13 @@
 const axios = require('axios');
 const yts = require('yt-search');
 const { proto, generateWAMessageFromContent, prepareWAMessageMedia } = require('@whiskeysockets/baileys');
+const fs = require('fs');
 
 module.exports = {
   name: 'youtube',
-  description: 'Mencari video YouTube dan mengirim hasil dalam bentuk carousel dengan tombol Download MP3/MP4',
+  description: 'Mencari video YouTube dan mengirim hasil dalam bentuk carousel dengan list menu interaktif untuk aksi (Salin Link, Download MP3/MP4)',
   run: async (sock, message, args) => {
     const chatId = message.key.remoteJid;
-    
     if (!args.length) {
       return await sock.sendMessage(chatId, { text: 'Masukkan query pencarian, misal: !youtube tutorial javascript' });
     }
@@ -17,14 +17,14 @@ module.exports = {
     const query = args.join(' ').trim();
     
     try {
-      // Lakukan pencarian video menggunakan yt-search
+      // Cari video dengan yt-search
       const searchResult = await yts(query);
       const videos = searchResult.videos.slice(0, 7);
       if (!videos.length) {
         return await sock.sendMessage(chatId, { text: 'Video tidak ditemukan!' });
       }
       
-      // Opsional: kirim pesan loading agar user menunggu
+      // Buat pesan loading (opsional)
       await sock.sendMessage(chatId, { text: "*Loading* ⌛\nTunggu beberapa detik..." });
       
       // Buat array card untuk carousel
@@ -32,7 +32,7 @@ module.exports = {
       for (const video of videos) {
         let mediaMsg = {};
         try {
-          // Siapkan thumbnail dengan fungsi upload ke server WhatsApp
+          // Siapkan thumbnail; Anda bisa mengganti URL thumbnail atau menggunakan file lokal
           mediaMsg = await prepareWAMessageMedia(
             { image: { url: video.thumbnail } },
             { upload: sock.waUploadToServer.bind(sock) }
@@ -41,7 +41,22 @@ module.exports = {
           console.error("Error preparing thumbnail:", err);
         }
         
-        // Buat card interaktif dengan tombol Download MP3 dan Download MP4
+        // Bangun struktur list menu untuk tombol
+        const listMenu = {
+          title: "Pilih Aksi",
+          sections: [
+            {
+              title: "Aksi Video",
+              rows: [
+                { id: `#copy ${video.url}`, title: "Salin Link", description: "Salin URL video YouTube" },
+                { id: `#ytmp3 ${video.url}`, title: "Download MP3", description: "Download audio MP3" },
+                { id: `#ytmp4 ${video.url}`, title: "Download MP4", description: "Download video MP4" }
+              ]
+            }
+          ]
+        };
+        
+        // Buat card interaktif dengan tombol list menu
         const card = {
           header: proto.Message.InteractiveMessage.Header.fromObject({
             title: video.title,
@@ -51,14 +66,8 @@ module.exports = {
           nativeFlowMessage: proto.Message.InteractiveMessage.NativeFlowMessage.fromObject({
             buttons: [
               {
-                buttonId: `#ytmp3 ${video.url}`,
-                buttonText: { displayText: 'Download MP3' },
-                type: 1
-              },
-              {
-                buttonId: `#ytmp4 ${video.url}`,
-                buttonText: { displayText: 'Download MP4' },
-                type: 1
+                name: "single_select",
+                buttonParamsJson: JSON.stringify(listMenu)
               }
             ]
           }),
