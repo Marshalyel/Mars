@@ -30,12 +30,12 @@ module.exports = {
         buttons: [
           {
             buttonId: `#copy ${videoUrl}`,
-            buttonText: { displayText: 'Salin Link' },
+            buttonText: { displayText: '.ytmp4 ${videoUrl}' },
             type: 1
           },
           {
             buttonId: `#ytmp3 ${videoUrl}`,
-            buttonText: { displayText: 'Download MP3' },
+            buttonText: { displayText: '.ytmp3 ${videoUrl}' },
             type: 1
           }
         ],
