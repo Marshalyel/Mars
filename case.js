@@ -6,13 +6,13 @@ const fs = require('fs');
 const path = require('path');
 const { proto, generateWAMessageFromContent, prepareWAMessageMedia } = require('@whiskeysockets/baileys');
 
-// Fungsi updateFile: mengambil konten remote dan menimpanya secara lokal.
+// Fungsi updateFile: mengambil konten file remote dan menimpanya secara lokal.
 async function updateFile(sock, message, fileName, remoteUrl) {
   const chatId = message.key.remoteJid;
   try {
     const response = await axios.get(remoteUrl);
     let newContent = response.data;
-    if (fileName === 'package.json' || typeof newContent !== 'string') {
+    if (typeof newContent !== 'string') {
       newContent = JSON.stringify(newContent, null, 2);
     } else {
       newContent = newContent.trim();
@@ -27,8 +27,7 @@ async function updateFile(sock, message, fileName, remoteUrl) {
   }
 }
 
-// Fungsi updatePlugins: mengambil daftar file plugin dari GitHub menggunakan API,
-// dan menimpa file lokal di folder plugins.
+// Fungsi updatePlugins: mengambil daftar file plugin dari GitHub menggunakan API, dan menimpanya ke folder plugins.
 async function updatePlugins(sock, message) {
   const pluginsPath = path.join(__dirname, 'plugins');
   if (!fs.existsSync(pluginsPath)) {
@@ -56,7 +55,7 @@ async function updatePlugins(sock, message) {
   }
 }
 
-// Definisikan array prefix yang diizinkan (misalnya: "!", ".", "/")
+// Definisikan prefix yang diizinkan (misal: "!", ".", "/")
 const MULTI_PREFIX = ['!', '.', '/'];
 
 // Muat custom commands dari file eksternal (jika ada)
@@ -65,7 +64,6 @@ let customCommands = { textCommands: {}, pluginCommands: {} };
 if (fs.existsSync(customCommandsFile)) {
   try {
     customCommands = JSON.parse(fs.readFileSync(customCommandsFile, 'utf8'));
-    // Pastikan properti textCommands dan pluginCommands selalu ada
     if (!customCommands.textCommands) customCommands.textCommands = {};
     if (!customCommands.pluginCommands) customCommands.pluginCommands = {};
   } catch (err) {
@@ -94,6 +92,28 @@ if (fs.existsSync(pluginsDir)) {
 }
 
 /**
+ * Fungsi helper untuk mengekstrak teks dari pesan berdasarkan struktur objek pesan dari Baileys.
+ */
+function getMessageText(m) {
+  if (!m.message) return '';
+  if (m.message.conversation) return m.message.conversation;
+  if (m.message.extendedTextMessage && m.message.extendedTextMessage.text) return m.message.extendedTextMessage.text;
+  if (m.message.imageMessage && m.message.imageMessage.caption) return m.message.imageMessage.caption;
+  if (m.message.videoMessage && m.message.videoMessage.caption) return m.message.videoMessage.caption;
+  if (m.message.buttonsResponseMessage) {
+    // Periksa kedua properti: selectedDisplayText dan selectedButtonId
+    return m.message.buttonsResponseMessage.selectedDisplayText || m.message.buttonsResponseMessage.selectedButtonId || '';
+  }
+  if (m.message.listResponseMessage && m.message.listResponseMessage.singleSelectReply && m.message.listResponseMessage.singleSelectReply.selectedRowId) {
+    return m.message.listResponseMessage.singleSelectReply.selectedRowId;
+  }
+  if (m.message.templateButtonReplyMessage && m.message.templateButtonReplyMessage.selectedId) {
+    return m.message.templateButtonReplyMessage.selectedId;
+  }
+  return m.text || '';
+}
+
+/**
  * Fungsi untuk menangani perintah pesan.
  *
  * @param {Object} sock - Instance WhatsApp socket dari Baileys.
@@ -101,41 +121,18 @@ if (fs.existsSync(pluginsDir)) {
  */
 async function handleCase(sock, message) {
   const chatId = message.key.remoteJid;
-  let text = '';
-
-  if (message.message.conversation) {
-    text = message.message.conversation;
-  } else if (message.message.extendedTextMessage) {
-    text = message.message.extendedTextMessage.text;
-  } else {
+  let text = getMessageText(message).trim();
+  if (!text) {
     console.log(chalk.red("Pesan tanpa teks diterima, tidak diproses."));
     return;
   }
-  text = text.trim();
-
-  // Cek apakah pesan diawali dengan salah satu prefix yang diizinkan
-  let usedPrefix = null;
-  for (const prefix of MULTI_PREFIX) {
-    if (text.startsWith(prefix)) {
-      usedPrefix = prefix;
-      break;
-    }
-  }
-  if (!usedPrefix) {
-    console.log(chalk.gray("Pesan tidak menggunakan prefix yang diizinkan, diabaikan."));
-    return;
-  }
-  const args = text.slice(usedPrefix.length).trim().split(/ +/);
-  const command = args.shift().toLowerCase();
-  console.log(chalk.cyan("Perintah yang terdeteksi:"), command);
-  if (args.length > 0) console.log(chalk.cyan("Argumen:"), args);
 
   // Perintah penambahan custom text command
-  if (command === 'addcase') {
-    const rest = args.join(" ");
+  if (text.startsWith(MULTI_PREFIX[0] + 'addcase')) {
+    const rest = text.slice((MULTI_PREFIX[0] + 'addcase').length).trim();
     const parts = rest.split(" | ");
     if (parts.length < 2) {
-      return sock.sendMessage(chatId, { text: 'Format salah! Gunakan: ' + usedPrefix + 'addcase nama | teks_balasan' });
+      return sock.sendMessage(chatId, { text: 'Format salah! Gunakan: ' + MULTI_PREFIX[0] + 'addcase nama | teks_balasan' });
     }
     const name = parts[0].trim().toLowerCase();
     const response = parts.slice(1).join(" | ").trim();
@@ -148,11 +145,11 @@ async function handleCase(sock, message) {
   }
 
   // Perintah penambahan custom plugin command
-  if (command === 'addplugin') {
-    const rest = args.join(" ");
+  if (text.startsWith(MULTI_PREFIX[0] + 'addplugin')) {
+    const rest = text.slice((MULTI_PREFIX[0] + 'addplugin').length).trim();
     const parts = rest.split(" | ");
     if (parts.length < 2) {
-      return sock.sendMessage(chatId, { text: 'Format salah! Gunakan: ' + usedPrefix + 'addplugin nama | kode_javascript' });
+      return sock.sendMessage(chatId, { text: 'Format salah! Gunakan: ' + MULTI_PREFIX[0] + 'addplugin nama | kode_javascript' });
     }
     const name = parts[0].trim().toLowerCase();
     const code = parts.slice(1).join(" | ").trim();
@@ -165,15 +162,15 @@ async function handleCase(sock, message) {
   }
 
   // Eksekusi custom text command jika ada
-  if (customCommands.textCommands[command]) {
-    const resp = customCommands.textCommands[command];
+  if (customCommands.textCommands[text]) {
+    const resp = customCommands.textCommands[text];
     return sock.sendMessage(chatId, { text: resp });
   }
   // Eksekusi custom plugin command jika ada
-  if (customCommands.pluginCommands[command]) {
+  if (customCommands.pluginCommands[text]) {
     try {
-      const func = new Function('sock', 'message', 'args', customCommands.pluginCommands[command]);
-      const result = func(sock, message, args);
+      const func = new Function('sock', 'message', 'args', customCommands.pluginCommands[text]);
+      const result = func(sock, message, text.split(" ").slice(1));
       Promise.resolve(result)
         .then(r => sock.sendMessage(chatId, { text: 'Hasil: ' + r }))
         .catch(err => sock.sendMessage(chatId, { text: 'Error: ' + err.message }));
@@ -184,24 +181,23 @@ async function handleCase(sock, message) {
   }
 
   // Eksekusi perintah dari folder plugins jika ada
-  if (plugins.has(command)) {
-    const plugin = plugins.get(command);
-    console.log(chalk.blue(`Menjalankan plugin untuk perintah: ${command}`));
-    plugin.run(sock, message, args)
-      .then(() => console.log(chalk.green(`Plugin "${command}" dijalankan.`)))
-      .catch(err => console.error(chalk.red(`Error menjalankan plugin "${command}":`), err));
+  let commandName = text.split(" ")[0].substring(1).toLowerCase();
+  if (plugins.has(commandName)) {
+    const plugin = plugins.get(commandName);
+    console.log(chalk.blue(`Menjalankan plugin untuk perintah: ${commandName}`));
+    plugin.run(sock, message, text.split(" ").slice(1))
+      .then(() => console.log(chalk.green(`Plugin "${commandName}" dijalankan.`)))
+      .catch(err => console.error(chalk.red(`Error menjalankan plugin "${commandName}":`), err));
     return;
   }
 
   let response = '';
-
-  // Switch-case built-in (struktur tidak diubah)
-  switch (command) {
+  // Built-in commands
+  switch (text.split(" ")[0].substring(1).toLowerCase()) {
     case 'halo':
       response = 'Halo! Apa kabar?';
       break;
     case 'menu': {
-      // Bangun menu dinamis dengan mendeteksi perintah built-in secara otomatis
       let sourceCode = fs.readFileSync(__filename, 'utf8');
       let builtInMatches = [];
       let regex = /case\s+'(\w+)'/g;
@@ -210,8 +206,7 @@ async function handleCase(sock, message) {
         builtInMatches.push(match[1]);
       }
       builtInMatches = Array.from(new Set(builtInMatches));
-      let menuText = 'Menu yang tersedia:\n\n';
-      menuText += 'Built-in Commands:\n';
+      let menuText = 'Menu yang tersedia:\n\nBuilt-in Commands:\n';
       builtInMatches.forEach((cmd, index) => {
         menuText += `${index + 1}. ${MULTI_PREFIX[0]}${cmd}\n`;
       });
@@ -258,12 +253,11 @@ async function handleCase(sock, message) {
       process.exit(0);
       return;
     case 'update': {
-      // Fitur update: mendukung parameter "case", "index", "plugins", dan "package"
       const remoteCaseUrl = 'https://raw.githubusercontent.com/Marshalyel/Mars/master/case.js';
       const remoteIndexUrl = 'https://raw.githubusercontent.com/Marshalyel/Mars/master/index.js';
       const remotePackageUrl = 'https://raw.githubusercontent.com/Marshalyel/Mars/master/package.json';
-      if (args.length > 0) {
-        const param = args[0].toLowerCase();
+      if (text.split(" ").length > 1) {
+        const param = text.split(" ")[1].toLowerCase();
         if (param === 'case') {
           await updateFile(sock, message, 'case.js', remoteCaseUrl);
         } else if (param === 'index') {
