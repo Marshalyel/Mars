@@ -7,7 +7,7 @@ const path = require('path');
 const { proto, generateWAMessageFromContent, prepareWAMessageMedia } = require('@whiskeysockets/baileys');
 
 /**
- * Fungsi updateFile: mengambil konten file remote dan menimpanya secara lokal.
+ * Fungsi updateFile: Mengambil konten file remote dan menimpanya secara lokal.
  */
 async function updateFile(sock, message, fileName, remoteUrl) {
   const chatId = message.key.remoteJid;
@@ -30,8 +30,7 @@ async function updateFile(sock, message, fileName, remoteUrl) {
 }
 
 /**
- * Fungsi updatePlugins: mengambil daftar file plugin dari GitHub menggunakan API,
- * dan menimpanya ke folder plugins.
+ * Fungsi updatePlugins: Mengambil daftar file plugin dari GitHub dan menimpanya ke folder plugins.
  */
 async function updatePlugins(sock, message) {
   const pluginsPath = path.join(__dirname, 'plugins');
@@ -97,16 +96,18 @@ if (fs.existsSync(pluginsDir)) {
 }
 
 /**
- * Fungsi helper untuk mengekstrak teks dari pesan berdasarkan struktur objek pesan Baileys.
+ * Fungsi helper getMessageText: Mengekstrak teks dari pesan berdasarkan struktur objek pesan Baileys.
+ * Fungsi ini mendukung pesan biasa, pesan extended, caption pada image/video, dan respon dari tombol.
  */
 function getMessageText(m) {
   if (!m.message) return '';
+  // Periksa pesan biasa
   if (m.message.conversation) return m.message.conversation;
   if (m.message.extendedTextMessage && m.message.extendedTextMessage.text) return m.message.extendedTextMessage.text;
   if (m.message.imageMessage && m.message.imageMessage.caption) return m.message.imageMessage.caption;
   if (m.message.videoMessage && m.message.videoMessage.caption) return m.message.videoMessage.caption;
+  // Periksa respons tombol interaktif
   if (m.message.buttonsResponseMessage) {
-    // Cek kedua properti untuk tombol
     return m.message.buttonsResponseMessage.selectedDisplayText || m.message.buttonsResponseMessage.selectedButtonId || '';
   }
   if (m.message.listResponseMessage &&
@@ -117,14 +118,31 @@ function getMessageText(m) {
   if (m.message.templateButtonReplyMessage && m.message.templateButtonReplyMessage.selectedId) {
     return m.message.templateButtonReplyMessage.selectedId;
   }
+  // Jika pesan dibungkus dalam viewOnceMessage
+  if (m.message.viewOnceMessage && m.message.viewOnceMessage.message) {
+    const vm = m.message.viewOnceMessage.message;
+    if (vm.conversation) return vm.conversation;
+    if (vm.extendedTextMessage && vm.extendedTextMessage.text) return vm.extendedTextMessage.text;
+    if (vm.imageMessage && vm.imageMessage.caption) return vm.imageMessage.caption;
+    if (vm.videoMessage && vm.videoMessage.caption) return vm.videoMessage.caption;
+    if (vm.buttonsResponseMessage) {
+      return vm.buttonsResponseMessage.selectedDisplayText || vm.buttonsResponseMessage.selectedButtonId || '';
+    }
+    if (vm.listResponseMessage &&
+        vm.listResponseMessage.singleSelectReply &&
+        vm.listResponseMessage.singleSelectReply.selectedRowId) {
+      return vm.listResponseMessage.singleSelectReply.selectedRowId;
+    }
+    if (vm.templateButtonReplyMessage && vm.templateButtonReplyMessage.selectedId) {
+      return vm.templateButtonReplyMessage.selectedId;
+    }
+  }
   return m.text || '';
 }
 
 /**
- * Fungsi untuk menangani perintah pesan.
- *
- * @param {Object} sock - Instance WhatsApp socket dari Baileys.
- * @param {Object} message - Objek pesan dari Baileys.
+ * Fungsi handleCase: Menangani perintah yang diterima dari pesan.
+ * Memproses custom command, plugin command, dan perintah built-in.
  */
 async function handleCase(sock, message) {
   const chatId = message.key.remoteJid;
@@ -134,7 +152,7 @@ async function handleCase(sock, message) {
     return;
   }
 
-  // Perintah penambahan custom text command
+  // Penambahan custom text command (misalnya: !addcase)
   if (text.startsWith(MULTI_PREFIX[0] + 'addcase')) {
     const rest = text.slice((MULTI_PREFIX[0] + 'addcase').length).trim();
     const parts = rest.split(" | ");
@@ -151,7 +169,7 @@ async function handleCase(sock, message) {
     return sock.sendMessage(chatId, { text: `Command "${name}" berhasil ditambahkan.` });
   }
 
-  // Perintah penambahan custom plugin command
+  // Penambahan custom plugin command (misalnya: !addplugin)
   if (text.startsWith(MULTI_PREFIX[0] + 'addplugin')) {
     const rest = text.slice((MULTI_PREFIX[0] + 'addplugin').length).trim();
     const parts = rest.split(" | ");
@@ -173,7 +191,6 @@ async function handleCase(sock, message) {
     const resp = customCommands.textCommands[text];
     return sock.sendMessage(chatId, { text: resp });
   }
-
   // Eksekusi custom plugin command jika ada
   if (customCommands.pluginCommands[text]) {
     try {
@@ -188,7 +205,7 @@ async function handleCase(sock, message) {
     return;
   }
 
-  // Eksekusi perintah dari folder plugins jika ada
+  // Eksekusi perintah dari plugin yang ada di folder plugins
   let commandName = text.split(" ")[0].substring(1).toLowerCase();
   if (plugins.has(commandName)) {
     const plugin = plugins.get(commandName);
@@ -200,7 +217,7 @@ async function handleCase(sock, message) {
   }
 
   let response = '';
-  // Built-in commands
+  // Perintah built-in
   switch (text.split(" ")[0].substring(1).toLowerCase()) {
     case 'halo':
       response = 'Halo! Apa kabar?';
