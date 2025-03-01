@@ -90,7 +90,8 @@ async function sendVideo(sock, chatId, m, videos, index) {
   ];
   
   if (index > 4) {
-    buttons.push({ buttonId: `.prev`, buttonText: { displayText: '⬅️ Back' }, type: 1 });
+    buttons.push({ buttonId: `.prev`, buttonText: { displayText: '.prev' }, type: 1 });
+    buttons.push({ buttonId: `.next`, buttonText: { displayText: '.next' }, type: 1 });
   }
   if (index < videos.length - 1) {
     buttons.push({ buttonId: `.next`, buttonText: { displayText: '.next' }, type: 1 });
