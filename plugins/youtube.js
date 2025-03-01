@@ -89,11 +89,8 @@ async function sendVideo(sock, chatId, m, videos, index) {
     { buttonId: `.ytmp4 ${videoUrl}`, buttonText: { displayText: `.ytmp4 ${videoUrl}` }, type: 1 }
   ];
   
-  if (index > 4) {
+  if (index > 0) {
     buttons.push({ buttonId: `.prev`, buttonText: { displayText: '.prev' }, type: 1 });
-    buttons.push({ buttonId: `.next`, buttonText: { displayText: '.next' }, type: 1 });
-  }
-  if (index < videos.length - 1) {
     buttons.push({ buttonId: `.next`, buttonText: { displayText: '.next' }, type: 1 });
   }
   
