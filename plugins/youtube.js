@@ -1,6 +1,6 @@
 const yts = require('yt-search');
 
-// Pastikan global.youtubeCache diinisialisasi (agar dapat diakses oleh plugin lain seperti .next/.prev jika diperlukan)
+// Pastikan global.youtubeCache diinisialisasi
 global.youtubeCache = global.youtubeCache || {};
 
 module.exports = {
@@ -44,24 +44,23 @@ module.exports = {
     if (m.message.buttonsResponseMessage) {
       const selectedButton = m.message.buttonsResponseMessage.selectedButtonId;
       if (selectedButton === '.next') {
+        // Jika belum di video terakhir, naikkan index.
+        // Jika sudah di video terakhir, index tetap sama.
         if (userCache.index < userCache.videos.length - 1) {
           userCache.index++;
-        } else {
-          // Jika sudah di video terakhir, beri tahu pengguna
-          return await sock.sendMessage(chatId, { text: 'Ini adalah video terakhir dari hasil pencarian.' }, { quoted: m });
         }
       } else if (selectedButton === '.prev') {
+        // Jika belum di video pertama, turunkan index.
+        // Jika sudah di video pertama, index tetap sama.
         if (userCache.index > 0) {
           userCache.index--;
-        } else {
-          return await sock.sendMessage(chatId, { text: 'Ini adalah video pertama.' }, { quoted: m });
         }
       } else {
         // Jika tombol yang ditekan bukan Next/Back, biarkan perintah lain yang menanganinya.
         return;
       }
       
-      // Kirim video berdasarkan indeks yang diperbarui
+      // Kirim video berdasarkan indeks yang diperbarui.
       await sendVideo(sock, chatId, m, userCache.videos, userCache.index);
     }
   }
@@ -80,18 +79,16 @@ async function sendVideo(sock, chatId, m, videos, index) {
   const video = videos[index];
   const videoUrl = video.url;
   
-  // Siapkan teks pesan dengan detail video
+  // Siapkan pesan dengan detail video
   const messageText = `📌 *${video.title}*\n📺 Channel: ${video.author.name || "Unknown"}\n⏳ Durasi: ${video.timestamp}\n👁 Views: ${video.views}\n🔗 Link: ${videoUrl}`;
   
-  // Siapkan tombol Next dan Back
+  // Tambahkan tombol agar selalu tampil: .ytmp3, .ytmp4, .prev, dan .next
   const buttons = [
     { buttonId: `.ytmp3 ${videoUrl}`, buttonText: { displayText: `.ytmp3 ${videoUrl}` }, type: 1 },
-    { buttonId: `.ytmp4 ${videoUrl}`, buttonText: { displayText: `.ytmp4 ${videoUrl}` }, type: 1 }
+    { buttonId: `.ytmp4 ${videoUrl}`, buttonText: { displayText: `.ytmp4 ${videoUrl}` }, type: 1 },
+    { buttonId: `.prev`, buttonText: { displayText: '⬅️ Back' }, type: 1 },
+    { buttonId: `.next`, buttonText: { displayText: '➡️ Next' }, type: 1 }
   ];
-  
-  if (index >= 0) {
-    buttons.push({ buttonId: `.next`, buttonText: { displayText: '.next' }, type: 1 });
-  }
   
   await sock.sendMessage(chatId, {
     text: messageText,
