@@ -1,13 +1,3 @@
-// plugins/next.js
-
-/**
- * Plugin ini menangani perintah ".next" untuk menampilkan video berikutnya
- * dari hasil pencarian YouTube yang telah disimpan dalam cache.
- *
- * Pastikan plugin utama YouTube menyimpan hasil pencarian pada:
- *    global.youtubeCache[chatId] = { videos: [...], index: <number> }
- */
-
 module.exports = {
   name: 'next',
   description: 'Menampilkan video selanjutnya dari hasil pencarian YouTube yang tersimpan.',
@@ -23,12 +13,29 @@ module.exports = {
     const videos = userCache.videos;
     let index = userCache.index;
     
-    // Jika sudah di video terakhir, beri tahu pengguna
+    // Jika sudah berada di video terakhir, jangan naikkan index, tetapi tampilkan pesan dengan tombol tetap
     if (index >= videos.length - 1) {
-      return await sock.sendMessage(chatId, { text: 'Ini adalah video terakhir dari hasil pencarian.' }, { quoted: m });
+      const video = videos[index];
+      const videoUrl = video.url;
+      const messageText = `📌 *${video.title}*\n📺 Channel: ${video.author.name || "Unknown"}\n⏳ Durasi: ${video.timestamp}\n👁 Views: ${video.views}\n🔗 Link: ${videoUrl}\n\nIni adalah video terakhir dari hasil pencarian.`;
+      
+      const buttons = [
+        { buttonId: `.ytmp3 ${videoUrl}`, buttonText: { displayText: `.ytmp3 ${videoUrl}` }, type: 1 },
+        { buttonId: `.ytmp4 ${videoUrl}`, buttonText: { displayText: `.ytmp4 ${videoUrl}` }, type: 1 },
+        { buttonId: `.prev`, buttonText: { displayText: '⬅️ Back' }, type: 1 },
+        { buttonId: `.next`, buttonText: { displayText: '➡️ Next' }, type: 1 }
+      ];
+      
+      return await sock.sendMessage(chatId, {
+        text: messageText,
+        footer: `Video ${index + 1} dari ${videos.length}`,
+        buttons: buttons,
+        headerType: 1,
+        viewOnce: true
+      }, { quoted: m });
     }
     
-    // Naikkan index untuk video selanjutnya
+    // Jika masih ada video berikutnya, naikkan index
     index++;
     userCache.index = index;
     
@@ -36,7 +43,6 @@ module.exports = {
     const videoUrl = video.url;
     const messageText = `📌 *${video.title}*\n📺 Channel: ${video.author.name || "Unknown"}\n⏳ Durasi: ${video.timestamp}\n👁 Views: ${video.views}\n🔗 Link: ${videoUrl}`;
     
-    // Buat tombol dengan format yang diinginkan
     const buttons = [
       { buttonId: `.ytmp3 ${videoUrl}`, buttonText: { displayText: `.ytmp3 ${videoUrl}` }, type: 1 },
       { buttonId: `.ytmp4 ${videoUrl}`, buttonText: { displayText: `.ytmp4 ${videoUrl}` }, type: 1 },
