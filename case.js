@@ -219,6 +219,27 @@ async function handleCase(sock, message) {
   let response = '';
   // Perintah built-in
   switch (text.split(" ")[0].substring(1).toLowerCase()) {
+      case 'list': {
+  const listMessage = {
+    text: 'Silahkan pilih opsi berikut:',
+    footer: 'Mars Bot',
+    title: 'Menu Utama',
+    buttonText: 'Klik disini',
+    sections: [
+      {
+        title: 'Kategori',
+        rows: [
+          { title: 'Info Bot', description: 'Informasi mengenai bot', rowId: 'info' },
+          { title: 'Bantuan', description: 'Butuh bantuan?', rowId: 'bantuan' },
+          // Tambahkan opsi lain sesuai kebutuhan
+        ]
+      }
+    ]
+  };
+  await sock.sendMessage(chatId, listMessage);
+  break;
+      }
+      
     case 'halo':
       response = 'Halo! Apa kabar?';
       break;
