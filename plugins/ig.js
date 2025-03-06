@@ -24,13 +24,13 @@ module.exports = {
       
       if (mediaType === 'GraphVideo') {
         buttons.push(
-          { buttonId: `.igmp3 ${url}`, buttonText: { displayText: 'Download Audio' }, type: 1 },
-          { buttonId: `.igmp4 ${url}`, buttonText: { displayText: 'Download Video' }, type: 1 },
-          { buttonId: `.igimg ${url}`, buttonText: { displayText: 'Download Thumbnail' }, type: 1 }
+          { buttonId: `.igmp3 ${url}`, buttonText: { displayText: `.igmp3 ${url}` }, type: 1 },
+          { buttonId: `.igmp4 ${url}`, buttonText: { displayText: `.igmp4 ${url}` }, type: 1 },
+          { buttonId: `.igimg ${url}`, buttonText: { displayText: `.igimg ${url}` }, type: 1 }
         );
       } else if (mediaType === 'GraphImage') {
         buttons.push(
-          { buttonId: `.igimg ${url}`, buttonText: { displayText: 'Download Gambar' }, type: 1 }
+          { buttonId: `.igimg ${url}`, buttonText: { displayText: `.igmimg ${url}` }, type: 1 }
         );
       }
       
