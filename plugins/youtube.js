@@ -20,8 +20,8 @@ module.exports = {
         return await sock.sendMessage(chatId, { text: 'Video tidak ditemukan!' });
       }
       
-      // Ambil 5 hasil teratas
-      const videos = searchResult.videos.slice(0, 5);
+      // Ambil semua hasil video yang tersedia (tanpa batasan 5 link)
+      const videos = searchResult.videos;
       
       // Simpan hasil pencarian di cache global berdasarkan chatId
       global.youtubeCache[chatId] = { videos, index: 0 };
@@ -44,19 +44,14 @@ module.exports = {
     if (m.message.buttonsResponseMessage) {
       const selectedButton = m.message.buttonsResponseMessage.selectedButtonId;
       if (selectedButton === '.next') {
-        // Jika belum di video terakhir, naikkan index.
-        // Jika sudah di video terakhir, index tetap sama.
         if (userCache.index < userCache.videos.length - 1) {
           userCache.index++;
         }
       } else if (selectedButton === '.prev') {
-        // Jika belum di video pertama, turunkan index.
-        // Jika sudah di video pertama, index tetap sama.
         if (userCache.index > 0) {
           userCache.index--;
         }
       } else {
-        // Jika tombol yang ditekan bukan Next/Back, biarkan perintah lain yang menanganinya.
         return;
       }
       
@@ -82,7 +77,7 @@ async function sendVideo(sock, chatId, m, videos, index) {
   // Siapkan pesan dengan detail video
   const messageText = `📌 *${video.title}*\n📺 Channel: ${video.author.name || "Unknown"}\n⏳ Durasi: ${video.timestamp}\n👁 Views: ${video.views}\n🔗 Link: ${videoUrl}`;
   
-  // Tambahkan tombol agar selalu tampil: .ytmp3, .ytmp4, .prev, dan .next
+  // Tambahkan tombol untuk download MP3/MP4, serta tombol navigasi (Back & Next)
   const buttons = [
     { buttonId: `.ytmp3 ${videoUrl}`, buttonText: { displayText: `.ytmp3 ${videoUrl}` }, type: 1 },
     { buttonId: `.ytmp4 ${videoUrl}`, buttonText: { displayText: `.ytmp4 ${videoUrl}` }, type: 1 },
