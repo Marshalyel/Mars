@@ -47,8 +47,8 @@ function askQuestion(query) {
 const transporter = nodemailer.createTransport({
   service: "gmail",
   auth: {
-    user: "your-email@gmail.com",
-    pass: "your-app-password"
+    user: "your-email@gmail.com",      // Ganti dengan email Anda
+    pass: "your-app-password"            // Ganti dengan app password Gmail Anda
   }
 });
 
@@ -90,7 +90,7 @@ async function authenticateWithEmail() {
   }
   const inputUsername = await askQuestion("Masukkan username yang dikirim ke email: ");
   const inputPassword = await askQuestion("Masukkan password yang dikirim ke email: ");
-  if (inputUsername === credentials.username && inputPassword === credentials.password) {
+  if (inputUsername.trim() === credentials.username && inputPassword.trim() === credentials.password) {
     console.log("Login berhasil!");
     return true;
   } else {
@@ -116,19 +116,33 @@ async function fetchConfig() {
 
 /**
  * Fungsi autentikasi konvensional (melalui GitHub config).
+ * Data diharapkan berupa array dengan properti "USERNAME" dan "PASSWORD".
  */
 async function authenticateUser() {
   const configData = await fetchConfig();
-  if (!Array.isArray(configData) || configData.length === 0) {
-    console.error(chalk.red("Konfigurasi user tidak valid atau kosong:"), JSON.stringify(configData, null, 2));
+  let users = [];
+  if (Array.isArray(configData)) {
+    users = configData;
+  } else if (configData && Array.isArray(configData.users)) {
+    users = configData.users;
+  } else {
+    console.error(chalk.red("Konfigurasi user tidak valid:"), JSON.stringify(configData, null, 2));
     process.exit(1);
   }
+  
   console.log(chalk.blue("Silakan login menggunakan username dan password:"));
   const inputUsername = (await askQuestion("Username: ")).trim();
   const inputPassword = (await askQuestion("Password: ")).trim();
   console.log(chalk.gray(`DEBUG: Input Username: '${inputUsername}', Password: '${inputPassword}'`));
-  const foundUser = configData.find(user => user.username === inputUsername && user.password === inputPassword);
+  
+  const foundUser = users.find(user => {
+    return user.USERNAME && user.PASSWORD &&
+           user.USERNAME.toString().trim() === inputUsername &&
+           user.PASSWORD.toString().trim() === inputPassword;
+  });
+  
   console.log(chalk.gray("DEBUG: Found User:"), foundUser);
+  
   if (foundUser) {
     console.log(chalk.green("Login berhasil!"));
     return true;
