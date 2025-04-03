@@ -4,7 +4,7 @@
   "description": "Bot WhatsApp menggunakan @whiskeysockets/baileys dengan tampilan log pesan yang lebih bagus dan auto restart saat ada perubahan",
   "main": "index.js",
   "scripts": {
-    "start": "nodemon index.js"
+    "start": "node index.js"
   },
   "author": "Nama Anda",
   "license": "MIT",
