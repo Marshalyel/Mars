@@ -8,6 +8,7 @@ const qrcode = require('qrcode-terminal');
 const readline = require('readline');
 const fs = require('fs');
 const path = require('path');
+const { google } = require('googleapis');
 
 // Muat setting owner dari file setting.js
 let settings = require('./setting');
