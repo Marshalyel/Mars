@@ -13,6 +13,9 @@ const { google } = require('googleapis');
 // Muat setting owner dari file setting.js
 let settings = require('./setting');
 
+// Memuat idchat terakhir
+let lastChatId = null;
+
 // Muat plugin gempa dan azan (jika tersedia)
 const gempaPlugin = require('./plugins/gempa');
 let azanPlugin;
@@ -369,19 +372,38 @@ async function startSock() {
        output: process.stdout
      });
      rl.on('line', async (input) => {
-       const [chatId, ...messageParts] = input.trim().split(' ');
-       const text = messageParts.join(' ');
-       if (!chatId || !text) {
-         console.log(chalk.yellow('Format salah. Gunakan: <chatId> <pesan>'));
-         return;
-       }
-       try {
-         await sock.sendMessage(chatId, { text });
-         console.log(chalk.green(`Pesan terkirim ke ${chatId}: "${text}"`));
-       } catch (err) {
-         console.error(chalk.red(`Gagal mengirim ke ${chatId}:`), err);
-       }
-     });
+  input = input.trim();
+  // Jika user mengetik 'balas <pesan>'
+  if (input.toLowerCase().startsWith('balas ')) {
+    const text = input.slice(6).trim();
+    if (!lastChatId) {
+      console.log(chalk.yellow('Tidak ada chat terakhir untuk dibalas.'));
+      return;
+    }
+    try {
+      await sock.sendMessage(lastChatId, { text });
+      console.log(chalk.green(`Balasan terkirim ke ${lastChatId}: "${text}"`));
+    } catch (err) {
+      console.error(chalk.red(`Gagal membalas ke ${lastChatId}:`), err);
+    }
+    return;
+  }
+
+  // Jika format manual: <chatId> <pesan>
+  const [chatId, ...messageParts] = input.split(' ');
+  const text = messageParts.join(' ');
+  if (!chatId || !text) {
+    console.log(chalk.yellow('Format salah. Gunakan: <chatId> <pesan> atau balas <pesan>'));
+    return;
+  }
+  try {
+    await sock.sendMessage(chatId, { text });
+    console.log(chalk.green(`Pesan terkirim ke ${chatId}: "${text}"`));
+  } catch (err) {
+    console.error(chalk.red(`Gagal mengirim ke ${chatId}:`), err);
+  }
+});
+
      // ==================================================
 
 
@@ -397,6 +419,8 @@ async function startSock() {
           const messageId = message.key.id;
           if (processedMessages.has(messageId)) {
             console.log(`Pesan dengan ID ${messageId} sudah diproses.`);
+            // ← SIMPAN CHAT TERAKHIR DI SINI
+            lastChatId = message.key.id;
             continue;
           }
           // Tandai pesan sebagai telah diproses
