@@ -1,3 +1,6 @@
 module.exports = {
-  owner: '6281523772093@s.whatsapp.net'
+  owner: '628xxx@s.whatsapp.net'
+  github_token: 'ghp_xxxx',
+  repo_owner: 'Marshalyel',
+  repo_name: 'Mars'
 };
