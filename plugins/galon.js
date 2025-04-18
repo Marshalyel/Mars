@@ -1,99 +1,55 @@
-// plugins/galon.js
-
-const { google } = require('googleapis');
-const path = require('path');
-const fs = require('fs');
-const chalk = require('chalk');
+const axios = require('axios');
+const cheerio = require('cheerio');
 
 const DOCUMENT_ID = '1Wis0wma8-q0HbqrHkwQdx6p1xT4bnwJIeLxodEI4ZO0';
+const URL = `https://docs.google.com/document/d/${DOCUMENT_ID}/edit`;
 
 module.exports = {
   name: 'galon',
-  description: 'Menampilkan data penjualan galon dari Google Docs',
+  description: 'Menampilkan data penjualan galon dari Google Docs publik dan merapikan otomatis',
 
   run: async (sock, m, args) => {
     const chatId = m.key.remoteJid;
+
     try {
-      // Periksa apakah file kredensial tersedia
-      const credPath = path.join(__dirname, '../credentials/service-account.json');
-      if (!fs.existsSync(credPath)) {
-        return await sock.sendMessage(chatId, { text: 'File kredensial tidak ditemukan. Harap letakkan file `service-account.json` di folder `credentials`.' });
+      const res = await axios.get(URL);
+      const $ = cheerio.load(res.data);
+      const rawText = $('body').text();
+
+      // Cari blok teks tabel (baris baris data)
+      const lines = rawText.split('\n').map(l => l.trim()).filter(Boolean);
+
+      // Filter baris yang kemungkinan format tabel: setidaknya 3 kolom (pelanggan, jumlah, harga)
+      const dataLines = lines.filter(line => line.split(/\s{2,}|\t/).length >= 3);
+
+      if (dataLines.length === 0) {
+        return await sock.sendMessage(chatId, { text: 'Data tabel tidak ditemukan atau tidak terbaca.' }, { quoted: m });
       }
 
-      // Ambil dokumen Google Docs
-      const doc = await getDocument(credPath);
-      const content = doc.body.content || [];
+      let summary = '*Data Penjualan Galon:*\n';
+      let totalSemua = 0;
 
-      // Temukan tabel pertama di dokumen
-      const tableElem = content.find(el => el.table);
-      if (!tableElem) {
-        return await sock.sendMessage(chatId, { text: 'Tidak menemukan tabel di dokumen.' });
-      }
-      const rows = tableElem.table.tableRows || [];
-      if (rows.length < 2) {
-        return await sock.sendMessage(chatId, { text: 'Tabel tidak memiliki data.' });
-      }
-
-      // Proses data
-      let overallTotal = 0;
-      let summary = '*Data Penjualan Galon:*
-';
-      for (let i = 1; i < rows.length; i++) {
-        const cells = rows[i].tableCells || [];
-        const pelanggan = getCellText(cells[0]);
-        const jumlahStr = getCellText(cells[1]);
-        const hargaStr = getCellText(cells[2]);
+      dataLines.forEach((line, i) => {
+        const [pelanggan, jumlahStr, hargaStr] = line.split(/\s{2,}|\t/).map(s => s.trim());
         const jumlah = parseFloat(jumlahStr.replace(/\./g, '').replace(/,/g, '.')) || 0;
         const harga = parseFloat(hargaStr.replace(/\./g, '').replace(/,/g, '.')) || 0;
         const total = jumlah * harga;
-        overallTotal += total;
-        summary += `\n${i}. ${pelanggan}\n   Jumlah: ${jumlahStr}\n   Harga: ${hargaStr}\n   Total: Rp ${total.toLocaleString('id-ID')}\n`;
-      }
-      summary += `\n*Total Semua: Rp ${overallTotal.toLocaleString('id-ID')}*`;
+        totalSemua += total;
 
-      // Kirim ringkasan
-      await sock.sendMessage(chatId, { text: summary });
-    } catch (error) {
-      console.error(chalk.red('Error plugin galon:'), error);
-      await sock.sendMessage(m.key.remoteJid, { text: 'Terjadi kesalahan saat mengambil data.' });
+        summary += `\n${i + 1}. ${pelanggan}\n   Jumlah: ${jumlahStr}\n   Harga: ${hargaStr}\n   Total: Rp ${total.toLocaleString('id-ID')}\n`;
+      });
+
+      summary += `\n*Total Semua: Rp ${totalSemua.toLocaleString('id-ID')}*`;
+
+      await sock.sendMessage(chatId, { text: summary }, { quoted: m });
+
+    } catch (err) {
+      console.error('Galon plugin error:', err.message);
+      await sock.sendMessage(chatId, { text: 'Gagal mengambil atau memproses dokumen galon.' }, { quoted: m });
     }
   },
 
   handleButtons: async () => {
-    // Tidak ada tombol interaktif untuk galon
+    // Tidak ada tombol
   }
 };
-
-// --------------------
-// Helper functions
-// --------------------
-
-async function authorize(credPath) {
-  const auth = new google.auth.GoogleAuth({
-    keyFile: credPath,
-    scopes: ['https://www.googleapis.com/auth/documents.readonly']
-  });
-  return auth.getClient();
-}
-
-async function getDocument(credPath) {
-  const authClient = await authorize(credPath);
-  const docs = google.docs({ version: 'v1', auth: authClient });
-  const res = await docs.documents.get({ documentId: DOCUMENT_ID });
-  return res.data;
-}
-
-function getCellText(cell) {
-  if (!cell || !cell.content) return '';
-  let text = '';
-  cell.content.forEach(item => {
-    if (item.paragraph && item.paragraph.elements) {
-      item.paragraph.elements.forEach(elem => {
-        if (elem.textRun && elem.textRun.content) {
-          text += elem.textRun.content.trim();
-        }
-      });
-    }
-  });
-  return text;
-                            }
