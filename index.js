@@ -13,6 +13,22 @@ const { google } = require('googleapis');
 // Muat setting owner dari file setting.js
 let settings = require('./setting');
 
+// File untuk menyimpan last chat
+const LAST_CHAT_FILE = path.join(__dirname, 'lastchat.txt');
+
+function saveLastChatId(chatId) {
+  fs.writeFileSync(LAST_CHAT_FILE, chatId, 'utf8');
+}
+
+function readLastChatId() {
+  try {
+    return fs.readFileSync(LAST_CHAT_FILE, 'utf8').trim();
+  } catch {
+    return null;
+  }
+}
+
+
 // Memuat idchat terakhir
 let lastChatId = null;
 
@@ -371,38 +387,22 @@ async function startSock() {
        input: process.stdin,
        output: process.stdout
      });
-     rl.on('line', async (input) => {
-  input = input.trim();
-  // Jika user mengetik 'balas <pesan>'
-  if (input.toLowerCase().startsWith('balas ')) {
-    const text = input.slice(6).trim();
-    if (!lastChatId) {
-      console.log(chalk.yellow('Tidak ada chat terakhir untuk dibalas.'));
-      return;
-    }
-    try {
-      await sock.sendMessage(lastChatId, { text });
-      console.log(chalk.green(`Balasan terkirim ke ${lastChatId}: "${text}"`));
-    } catch (err) {
-      console.error(chalk.red(`Gagal membalas ke ${lastChatId}:`), err);
-    }
-    return;
-  }
-
-  // Jika format manual: <chatId> <pesan>
-  const [chatId, ...messageParts] = input.split(' ');
-  const text = messageParts.join(' ');
-  if (!chatId || !text) {
-    console.log(chalk.yellow('Format salah. Gunakan: <chatId> <pesan> atau balas <pesan>'));
-    return;
-  }
-  try {
-    await sock.sendMessage(chatId, { text });
-    console.log(chalk.green(`Pesan terkirim ke ${chatId}: "${text}"`));
-  } catch (err) {
-    console.error(chalk.red(`Gagal mengirim ke ${chatId}:`), err);
-  }
-});
+   rl.on('line', async line => {
+        const inp = line.trim();
+        if (inp.toLowerCase().startsWith('balas ')) {
+          const text = inp.slice(6).trim();
+          const chatId = readLastChatId();
+          if (!chatId) return console.log(chalk.yellow('No last chat'));
+          await sock.sendMessage(chatId,{text});
+          console.log(chalk.green('Replied to ' + chatId));
+          return;
+        }
+        const [chatId, ...parts] = inp.split(' ');
+        const text = parts.join(' ');
+        if (!chatId||!text) return console.log(chalk.yellow('Use: <chatId> <msg> or balas <msg>'));
+        await sock.sendMessage(chatId,{text});
+        console.log(chalk.green('Sent to ' + chatId));
+      });
 
      // ==================================================
 
@@ -421,6 +421,7 @@ async function startSock() {
             console.log(`Pesan dengan ID ${messageId} sudah diproses.`);
             // ← SIMPAN CHAT TERAKHIR DI SINI
             lastChatId = message.key.id;
+            saveLastChatId(message.key.id);
             continue;
           }
           // Tandai pesan sebagai telah diproses
