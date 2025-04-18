@@ -363,6 +363,28 @@ async function startSock() {
         }
       } else if (connection === 'open') {
         console.log(chalk.green("Koneksi berhasil terbuka"));
+             // === Input via console untuk kirim pesan manual ===
+     const rl = readline.createInterface({
+       input: process.stdin,
+       output: process.stdout
+     });
+     rl.on('line', async (input) => {
+       const [chatId, ...messageParts] = input.trim().split(' ');
+       const text = messageParts.join(' ');
+       if (!chatId || !text) {
+         console.log(chalk.yellow('Format salah. Gunakan: <chatId> <pesan>'));
+         return;
+       }
+       try {
+         await sock.sendMessage(chatId, { text });
+         console.log(chalk.green(`Pesan terkirim ke ${chatId}: "${text}"`));
+       } catch (err) {
+         console.error(chalk.red(`Gagal mengirim ke ${chatId}:`), err);
+       }
+     });
+     // ==================================================
+
+
       }
     });
     sock.ev.on('messages.upsert', async (m) => {
