@@ -26,13 +26,14 @@ module.exports = {
       // Contoh kolom: Tanggal,Jumlah,Harga
       let totalSemua = 0;
       const perPelanggan = records.reduce((acc, row) => {
-        const nama = row.Nama.trim();
-        const jumlah = parseInt(row.Jumlah, 10) || 0;
-        const harga = parseFloat(row.Harga.replace(/[^\d.]/g, '')) || 0;
+        const nama = (row.pelanggan || 'Tanpa Nama').trim();
+        const jumlah = parseInt(row.banyak, 10) || 0;
+        const harga = parseFloat((row.harga || '0').replace(/[^\d.]/g, '')) || 0;
         const total = jumlah * harga;
         totalSemua += total;
-        if (!acc[nama]) acc[nama] = { jumlah: 0, total: 0 };
+        if (!acc[nama]) acc[nama] = { jumlah: 0, harga: 0, total: 0 };
         acc[nama].jumlah += jumlah;
+        acc[nama].harga += harga;
         acc[nama].total += total;
         return acc;
       }, {});
@@ -41,10 +42,10 @@ module.exports = {
       let teks = '*Data Penjualan Galon:*\n\n';
       let idx = 1;
       for (const [nama, obj] of Object.entries(perPelanggan)) {
-        teks += `${idx}. ${nama}\n   • Jumlah beli: ${obj.jumlah}\n   • Total: Rp ${obj.total.toLocaleString()}\n\n`;
+        teks += `${idx}. ${nama}\n   • Jumlah beli: ${obj.jumlah}\n   • Harga: ${obj.harga}.000\n   • Total: Rp ${obj.total.toLocaleString()}.000\n\n`;
         idx++;
       }
-      teks += `*Total Semua:* Rp ${totalSemua.toLocaleString()}`;
+      teks += `*Total Semua:* Rp ${totalSemua.toLocaleString()}.000`;
 
       // Kirim ke chat
       await sock.sendMessage(chatId, { text: teks }, { quoted: m });
