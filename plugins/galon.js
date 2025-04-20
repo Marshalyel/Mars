@@ -10,7 +10,7 @@ module.exports = {
     try {
       // Ganti SPREADSHEET_ID dan gid=0 sesuai sheet Anda
       const csvUrl = 
-        'https://docs.google.com/spreadsheets/d/1eLtgKNmQ8rjORpv9c_z9miRIauwQMXOnS7XXuzs4Lb8/export?format=csv&gid=123456789';
+        'https://docs.google.com/spreadsheets/d/1eLtgKNmQ8rjORpv9c_z9miRIauwQMXOnS7XXuzs4Lb8/export?format=csv&gid=0';
 
       // Ambil CSV
       const res = await axios.get(csvUrl);
