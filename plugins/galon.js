@@ -1,55 +1,56 @@
 const axios = require('axios');
-const cheerio = require('cheerio');
-
-const DOCUMENT_ID = '1Wis0wma8-q0HbqrHkwQdx6p1xT4bnwJIeLxodEI4ZO0';
-const URL = `https://docs.google.com/document/d/${DOCUMENT_ID}/edit`;
+const { parse } = require('csv-parse/sync');
 
 module.exports = {
   name: 'galon',
-  description: 'Menampilkan data penjualan galon dari Google Docs publik dan merapikan otomatis',
-
-  run: async (sock, m, args) => {
+  description: 'Tampilkan ringkasan penjualan galon dari Google Sheets',
+  usage: '!galon',
+  async run(sock, m, args) {
     const chatId = m.key.remoteJid;
-
     try {
-      const res = await axios.get(URL);
-      const $ = cheerio.load(res.data);
-      const rawText = $('body').text();
+      // Ganti SPREADSHEET_ID dan gid=0 sesuai sheet Anda
+      const csvUrl = 
+        'https://docs.google.com/spreadsheets/d/1Wis0wma8-q0HbqrHkwQdx6p1xT4bnwJIeLxodEI4ZO0/export?format=csv&gid=0';
 
-      // Cari blok teks tabel (baris baris data)
-      const lines = rawText.split('\n').map(l => l.trim()).filter(Boolean);
-
-      // Filter baris yang kemungkinan format tabel: setidaknya 3 kolom (pelanggan, jumlah, harga)
-      const dataLines = lines.filter(line => line.split(/\s{2,}|\t/).length >= 3);
-
-      if (dataLines.length === 0) {
-        return await sock.sendMessage(chatId, { text: 'Data tabel tidak ditemukan atau tidak terbaca.' }, { quoted: m });
-      }
-
-      let summary = '*Data Penjualan Galon:*\n';
-      let totalSemua = 0;
-
-      dataLines.forEach((line, i) => {
-        const [pelanggan, jumlahStr, hargaStr] = line.split(/\s{2,}|\t/).map(s => s.trim());
-        const jumlah = parseFloat(jumlahStr.replace(/\./g, '').replace(/,/g, '.')) || 0;
-        const harga = parseFloat(hargaStr.replace(/\./g, '').replace(/,/g, '.')) || 0;
-        const total = jumlah * harga;
-        totalSemua += total;
-
-        summary += `\n${i + 1}. ${pelanggan}\n   Jumlah: ${jumlahStr}\n   Harga: ${hargaStr}\n   Total: Rp ${total.toLocaleString('id-ID')}\n`;
+      // Ambil CSV
+      const res = await axios.get(csvUrl);
+      const records = parse(res.data, {
+        columns: true,
+        skip_empty_lines: true
       });
 
-      summary += `\n*Total Semua: Rp ${totalSemua.toLocaleString('id-ID')}*`;
+      if (!records.length) {
+        return sock.sendMessage(chatId, { text: 'Data kosong atau tidak valid.' });
+      }
 
-      await sock.sendMessage(chatId, { text: summary }, { quoted: m });
+      // Contoh kolom: Tanggal,Jumlah,Harga
+      let totalSemua = 0;
+      const perPelanggan = records.reduce((acc, row) => {
+        const nama = row.Nama.trim();
+        const jumlah = parseInt(row.Jumlah, 10) || 0;
+        const harga = parseFloat(row.Harga.replace(/[^\d.]/g, '')) || 0;
+        const total = jumlah * harga;
+        totalSemua += total;
+        if (!acc[nama]) acc[nama] = { jumlah: 0, total: 0 };
+        acc[nama].jumlah += jumlah;
+        acc[nama].total += total;
+        return acc;
+      }, {});
 
+      // Bentuk teks output
+      let teks = '*Data Penjualan Galon:*\n\n';
+      let idx = 1;
+      for (const [nama, obj] of Object.entries(perPelanggan)) {
+        teks += `${idx}. ${nama}\n   • Jumlah beli: ${obj.jumlah}\n   • Total: Rp ${obj.total.toLocaleString()}\n\n`;
+        idx++;
+      }
+      teks += `*Total Semua:* Rp ${totalSemua.toLocaleString()}`;
+
+      // Kirim ke chat
+      await sock.sendMessage(chatId, { text: teks }, { quoted: m });
     } catch (err) {
-      console.error('Galon plugin error:', err.message);
-      await sock.sendMessage(chatId, { text: 'Gagal mengambil atau memproses dokumen galon.' }, { quoted: m });
+      console.error('Error plugins/galon:', err);
+      await sock.sendMessage(chatId, { text: 'Gagal mengambil data galon.' });
     }
-  },
-
-  handleButtons: async () => {
-    // Tidak ada tombol
   }
 };
