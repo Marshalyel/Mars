@@ -1,5 +1,5 @@
 // case.js
-
+let settings = require('./setting');
 const axios = require('axios');
 const chalk = require('chalk');
 const fs = require('fs');
@@ -38,8 +38,8 @@ async function updatePlugins(sock, message) {
     fs.mkdirSync(pluginsPath, { recursive: true });
   }
   try {
-    const apiUrl = 'https://api.github.com/repos/Marshalyel/Mars/contents/plugins';
-    const response = await axios.get(apiUrl, {
+    
+    const response = await axios.get(settings.apiUrl, {
       headers: { 'Accept': 'application/vnd.github.v3+json' }
     });
     if (!response.data || !Array.isArray(response.data)) {
@@ -278,7 +278,7 @@ async function handleCase(sock, message) {
           i++;
         }
       }
-      response = menuText;
+      response = menuText + '\n!addcase\n!addplugin';
       break;
     }
     case 'info':
@@ -299,26 +299,26 @@ async function handleCase(sock, message) {
       process.exit(0);
       return;
     case 'update': {
-      const remoteCaseUrl = 'https://raw.githubusercontent.com/Marshalyel/Mars/master/case.js';
-      const remoteIndexUrl = 'https://raw.githubusercontent.com/Marshalyel/Mars/master/index.js';
-      const remotePackageUrl = 'https://raw.githubusercontent.com/Marshalyel/Mars/master/package.json';
+      
+      
+     
       if (text.split(" ").length > 1) {
         const param = text.split(" ")[1].toLowerCase();
         if (param === 'case') {
-          await updateFile(sock, message, 'case.js', remoteCaseUrl);
+          await updateFile(sock, message, 'case.js', settings.remoteCaseUrl);
         } else if (param === 'index') {
-          await updateFile(sock, message, 'index.js', remoteIndexUrl);
+          await updateFile(sock, message, 'index.js', settings.remoteIndexUrl);
         } else if (param === 'plugins') {
           await updatePlugins(sock, message);
         } else if (param === 'package') {
-          await updateFile(sock, message, 'package.json', remotePackageUrl);
+          await updateFile(sock, message, 'package.json', settings.remotePackageUrl);
         } else {
           response = 'Parameter update tidak dikenali. Gunakan "case", "index", "plugins", atau "package".';
         }
       } else {
-        await updateFile(sock, message, 'case.js', remoteCaseUrl);
-        await updateFile(sock, message, 'index.js', remoteIndexUrl);
-        await updateFile(sock, message, 'package.json', remotePackageUrl);
+        await updateFile(sock, message, 'case.js', settings.remoteCaseUrl);
+        await updateFile(sock, message, 'index.js', settings.remoteIndexUrl);
+        await updateFile(sock, message, 'package.json', settings.remotePackageUrl);
         await updatePlugins(sock, message);
       }
       return;

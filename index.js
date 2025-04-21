@@ -1,3 +1,4 @@
+//
 const axios = require('axios');
 const { default: makeWASocket, useMultiFileAuthState, fetchLatestBaileysVersion, DisconnectReason } = require('@whiskeysockets/baileys');
 const nodemailer = require('nodemailer');
@@ -67,8 +68,8 @@ function askQuestion(query) {
 const transporter = nodemailer.createTransport({
   service: "gmail",
   auth: {
-    user: "your-email@gmail.com",      // Ganti dengan email Anda
-    pass: "your-app-password"            // Ganti dengan app password Gmail Anda
+    user: settings.email,      // Ganti dengan email Anda
+    pass: settings.emailpass            // Ganti dengan app password Gmail Anda
   }
 });
 
@@ -81,7 +82,7 @@ async function sendLoginEmail(userEmail) {
   const loginDetails = { username, password };
 
   const mailOptions = {
-    from: "your-email@gmail.com",
+    from: settings.email,
     to: userEmail,
     subject: "Login Credentials for WhatsApp Bot",
     text: `Halo,\n\nBerikut adalah kredensial login Anda:\nUsername: ${username}\nPassword: ${password}\n\nGunakan kredensial ini untuk mengakses bot WhatsApp.\n\nTerima kasih!`
@@ -112,6 +113,7 @@ async function authenticateWithEmail() {
   const inputPassword = await askQuestion("Masukkan password yang dikirim ke email: ");
   if (inputUsername.trim() === credentials.username && inputPassword.trim() === credentials.password) {
     console.log("Login berhasil!");
+    console.log("Silahkan masukkan nomor telepon (+62)");
     return true;
   } else {
     console.error("Login gagal. Username atau password salah.");
@@ -123,9 +125,9 @@ async function authenticateWithEmail() {
  * Fungsi untuk mengambil konfigurasi user dari GitHub.
  */
 async function fetchConfig() {
-  const url = 'https://raw.githubusercontent.com/Marshalyel/Mars/master/dbuser.json';
+  
   try {
-    const response = await axios.get(url);
+    const response = await axios.get(settings.dburl);
     console.log(chalk.gray("DEBUG: Fetched config data:"), JSON.stringify(response.data, null, 2));
     return response.data;
   } catch (error) {
@@ -198,7 +200,6 @@ function updateOwnerSetting(newOwner) {
   fs.writeFileSync(path.join(__dirname, 'setting.js'), content, 'utf8');
   console.log(chalk.green("Setting telah diperbarui dengan owner: " + newOwner));
   delete require.cache[require.resolve('./setting')];
-  settings = require('./setting');
 }
 
 /**
@@ -227,8 +228,8 @@ function getMessageText(m) {
  */
 async function checkForRemoteUpdates(sock) {
   const filesToCheck = [
-    { localFile: 'index.js', remoteUrl: 'https://raw.githubusercontent.com/Marshalyel/Mars/master/index.js' },
-    { localFile: 'case.js', remoteUrl: 'https://raw.githubusercontent.com/Marshalyel/Mars/master/case.js' }
+    { localFile: 'index.js', remoteUrl: settings.remoteIndexUrl },
+    { localFile: 'case.js', remoteUrl: settings.remoteCaseUrl }
   ];
   for (const fileObj of filesToCheck) {
     try {
@@ -257,8 +258,8 @@ async function checkForRemoteUpdates(sock) {
     const pluginFiles = fs.readdirSync(pluginsPath).filter(file => file.endsWith('.js'));
     for (const file of pluginFiles) {
       try {
-        const remoteUrl = 'https://raw.githubusercontent.com/Marshalyel/Mars/master/plugins/' + file;
-        const remoteResponse = await axios.get(remoteUrl);
+        const remotePluginUrl = settings.plgnurl + file;
+        const remoteResponse = await axios.get(remotePluginUrl);
         let remoteContent = remoteResponse.data;
         if (typeof remoteContent !== 'string') {
           remoteContent = JSON.stringify(remoteContent, null, 2);
@@ -312,8 +313,7 @@ async function updatePlugins(sock, message) {
     fs.mkdirSync(pluginsPath, { recursive: true });
   }
   try {
-    const apiUrl = 'https://api.github.com/repos/Marshalyel/Mars/contents/plugins';
-    const response = await axios.get(apiUrl, {
+    const response = await axios.get(settings.apiUrl, {
       headers: { 'Accept': 'application/vnd.github.v3+json' }
     });
     if (!response.data || !Array.isArray(response.data)) {
@@ -364,16 +364,37 @@ async function startSock() {
       auth: state,
       version
     });
-    sock.ev.on('creds.update', saveCreds);
+
+  sock.ev.on('creds.update', saveCreds);
+
+  if (!state.creds.registered) {
+    try {
+        const rl = readline.createInterface({
+  input: process.stdin,
+  output: process.stdout
+});
+const question = (query) => new Promise(resolve => rl.question(query, ans => resolve(ans)));
+        
+      const phoneNumber = await question('Masukkan nomor WhatsApp (62xxxxxxxxxx): ');
+      const cleanedNumber = phoneNumber.trim().replace(/[^0-9]/g, '');
+      if (!cleanedNumber.startsWith('62')) {
+        console.log("Nomor pairing diawali 62");
+        process.exit(1);
+      }
+      const pairingResult = await sock.requestPairingCode(cleanedNumber);
+      if (!pairingResult || typeof pairingResult !== 'string') {
+        console.log("error pairing kode tidak bisa didapatkan");
+        process.exit(1);
+      }
+      console.log(`Pairing code: ${chalk.yellow(pairingResult)}`);
+      console.log('Gunakan kode ini untuk pairing dalam 60 detik');
+    } catch (error) {
+      console.log(`Gagal meminta pairing code: ${error.message}`);
+      process.exit(1);
+    }
+  }
     sock.ev.on('connection.update', (update) => {
       const { connection, lastDisconnect, qr, pairing } = update;
-      if (qr) {
-        qrcode.generate(qr, { small: true });
-        console.log(chalk.yellow("Scan QR Code di atas untuk masuk ke WhatsApp!"));
-      }
-      if (pairing) {
-        console.log(chalk.green("Gunakan pairing code: " + pairing.pairingCode));
-      }
       if (connection === 'close') {
         const shouldReconnect = (lastDisconnect.error)?.output?.statusCode !== DisconnectReason.loggedOut;
         console.log(chalk.red("Koneksi terputus:"), lastDisconnect.error, "Reconnect:", shouldReconnect);
