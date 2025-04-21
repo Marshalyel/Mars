@@ -26,7 +26,11 @@ module.exports = {
     const cpuSpeed = cpus[0].speed; // dalam MHz
     const totalMem = (os.totalmem() / 1024 / 1024).toFixed(2); // MB
     const freeMem = (os.freemem() / 1024 / 1024).toFixed(2); // MB
-    const uptime = os.uptime(); // dalam detik
+    const uptime = os.uptime();// dalam detik
+    const uptimej = (os.uptime() / 3600).toFixed(0);
+      const uptimem = (((os.uptime() / 3600).toFixed(2) - (os.uptime() / 3600).toFixed(0))*60).toFixed(0);
+      const uptimem2 = (((os.uptime() / 3600).toFixed(2) - (os.uptime() / 3600).toFixed(0))*60).toFixed(2);
+      const uptimed = ((uptimem2 - uptimem)*3600).toFixed(2)
 
     // Hitung waktu eksekusi (response speed)
     const end = process.hrtime(start);
@@ -39,7 +43,8 @@ module.exports = {
                     `*Platform:* ${platform} ${release} (${arch})\n` +
                     `*CPU:* ${cpuModel} @ ${cpuSpeed} MHz\n` +
                     `*Memory:* ${freeMem} MB free / ${totalMem} MB total\n` +
-                    `*Uptime:* ${uptime} seconds`;
+                    `*Uptime:* ${uptime} seconds /
+${uptimej} jam;${uptimem} menit;${uptimed} detik`;
 
     await sock.sendMessage(chatId, { text: textMsg });
   }
