@@ -1,7 +1,7 @@
 module.exports = {
   owner: '628xxx@s.whatsapp.net',
   
-  //login via panel
+  //login via panel (github)
   dburl: 'https://raw.githubusercontent.com/Marshalyel/Mars/master/dbuser.json',
     
   //login via Email
